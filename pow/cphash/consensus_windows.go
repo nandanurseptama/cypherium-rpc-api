@@ -295,7 +295,6 @@ func calcCandidateDifficulty(time uint64, parent *types.KeyBlockHeader, bombDela
 	bombDelayFromParent := new(big.Int).Sub(bombDelay, big1)
 
 	// calculate a fake block number for the ice-age delay
-	// Specification: https://eips.ethereum.org/EIPS/eip-1234
 	fakeBlockNumber := new(big.Int)
 	if parent.Number.Cmp(bombDelayFromParent) >= 0 {
 		fakeBlockNumber = fakeBlockNumber.Sub(parent.Number, bombDelayFromParent)

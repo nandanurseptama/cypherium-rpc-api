@@ -57,8 +57,8 @@ const (
 
 	eciesOverhead = 65 /* pubkey */ + 16 /* IV */ + 32 /* MAC */
 
-	encAuthMsgLen  = authMsgLen + eciesOverhead  // size of encrypted pre-EIP-8 initiator handshake
-	encAuthRespLen = authRespLen + eciesOverhead // size of encrypted pre-EIP-8 handshake reply
+	encAuthMsgLen  = authMsgLen + eciesOverhead  //
+	encAuthRespLen = authRespLen + eciesOverhead //
 
 	// total timeout for encryption handshake and protocol
 	// handshake in both directions.
@@ -214,7 +214,6 @@ type secrets struct {
 	Token                 []byte
 }
 
-// RLPx v4 handshake auth (defined in EIP-8).
 type authMsgV4 struct {
 	gotPlain bool // whether read packet had plain format.
 
@@ -227,7 +226,6 @@ type authMsgV4 struct {
 	Rest []rlp.RawValue `rlp:"tail"`
 }
 
-// RLPx v4 handshake response (defined in EIP-8).
 type authRespV4 struct {
 	RandomPubkey [pubLen]byte
 	Nonce        [shaLen]byte
@@ -470,7 +468,6 @@ func sealEIP8(msg interface{}, h *encHandshake) ([]byte, error) {
 		return nil, err
 	}
 	// pad with random amount of data. the amount needs to be at least 100 bytes to make
-	// the message distinguishable from pre-EIP-8 handshakes.
 	pad := padSpace[:mrand.Intn(len(padSpace)-100)+100]
 	buf.Write(pad)
 	prefix := make([]byte, 2)
@@ -489,13 +486,12 @@ func readHandshakeMsg(msg plainDecoder, plainSize int, prv *ecdsa.PrivateKey, r 
 	if _, err := io.ReadFull(r, buf); err != nil {
 		return buf, err
 	}
-	// Attempt decoding pre-EIP-8 "plain" format.
 	key := ecies.ImportECDSA(prv)
 	if dec, err := key.Decrypt(buf, nil, nil); err == nil {
 		msg.decodePlain(dec)
 		return buf, nil
 	}
-	// Could be EIP-8 format, try that.
+
 	prefix := buf[:2]
 	size := binary.BigEndian.Uint16(prefix)
 	if size < uint16(plainSize) {

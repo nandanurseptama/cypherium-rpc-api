@@ -507,9 +507,7 @@ func (w *wallet) SignHash(account accounts.Account, hash []byte) ([]byte, error)
 // wallet to request a confirmation from the user. It returns either the signed
 // transaction or a failure if the user denied the transaction.
 //
-// Note, if the version of the Cypherium application running on the Ledger wallet is
-// too old to sign EIP-155 transactions, but such is requested nonetheless, an error
-// will be returned opposed to silently signing in Homestead mode.
+
 func (w *wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	w.stateLock.RLock() // Comms have own mutex, this is for the state fields
 	defer w.stateLock.RUnlock()

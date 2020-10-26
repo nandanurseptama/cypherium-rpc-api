@@ -402,7 +402,7 @@ var eip8HandshakeAuthTests = []handshakeAuthTest{
 		isPlain:     true,
 		wantVersion: 4,
 	},
-	// (Auth₂) EIP-8 encoding
+	// (Auth₂)
 	{
 		input: `
 			01b304ab7578555167be8154d5cc456f567d5ba302662433674222360f08d5f1534499d3678b513b
@@ -420,7 +420,7 @@ var eip8HandshakeAuthTests = []handshakeAuthTest{
 		wantVersion: 4,
 		wantRest:    []rlp.RawValue{},
 	},
-	// (Auth₃) RLPx v4 EIP-8 encoding with version 56, additional list elements
+	// (Auth₃) RLPx v4
 	{
 		input: `
 			01b8044c6c312173685d1edd268aa95e1d495474c6959bcdd10067ba4c9013df9e40ff45f5bfd6f7
@@ -480,7 +480,7 @@ var eip8HandshakeRespTests = []handshakeAckTest{
 		wantVersion: 4,
 		wantRest:    []rlp.RawValue{},
 	},
-	// (Ack₃) EIP-8 encoding with version 57, additional list elements
+	// (Ack₃)
 	{
 		input: `
 			01f004076e58aae772bb101ab1a8e64e01ee96e64857ce82b1113817c6cdd52c09d26f7b90981cd7

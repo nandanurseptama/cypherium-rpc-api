@@ -33,7 +33,7 @@ func TestState(t *testing.T) {
 	st.skipShortMode(`^stQuadraticComplexityTest/`)
 	// Broken tests:
 	st.skipLoad(`^stTransactionTest/OverflowGasRequire\.json`) // gasLimit > 256 bits
-	st.skipLoad(`^stTransactionTest/zeroSigTransa[^/]*\.json`) // EIP-86 is not supported yet
+	st.skipLoad(`^stTransactionTest/zeroSigTransa[^/]*\.json`) // is not supported yet
 	// Expected failures:
 	st.fails(`^stRevertTest/RevertPrecompiledTouch\.json/EIP158`, "bug in test")
 	st.fails(`^stRevertTest/RevertPrecompiledTouch\.json/Byzantium`, "bug in test")
