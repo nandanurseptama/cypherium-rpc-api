@@ -97,7 +97,7 @@ func loadConfig(file string, cfg *gcphConfig) error {
 func defaultNodeConfig() node.Config {
 	cfg := node.DefaultConfig
 	cfg.Name = clientIdentifier
-	cfg.Version = params.VersionWithCommit(gitCommit)
+	cfg.Version = params.VersionWithCommit(gitCommit, "")
 	cfg.HTTPModules = append(cfg.HTTPModules, "cph", "shh")
 	cfg.WSModules = append(cfg.WSModules, "cph", "shh")
 	cfg.IPCPath = "cypher.ipc"

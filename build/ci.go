@@ -1,43 +1,3 @@
-// Copyright 2016 The cypherBFT Authors
-// This file is part of the cypherBFT library.
-//
-// The cypherBFT library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The cypherBFT library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the cypherBFT library. If not, see <http://www.gnu.org/licenses/>.
-
-// +build none
-
-/*
-The ci command is called from Continuous Integration scripts.
-
-Usage: go run build/ci.go <command> <command flags/arguments>
-
-Available commands are:
-
-   install    [ -arch architecture ] [ -cc compiler ] [ packages... ]                          -- builds packages and executables
-   test       [ -coverage ] [ packages... ]                                                    -- runs the tests
-   lint                                                                                        -- runs certain pre-selected linters
-   archive    [ -arch architecture ] [ -type zip|tar ] [ -signer key-envvar ] [ -upload dest ] -- archives build artefacts
-   importkeys                                                                                  -- imports signing keys from env
-   debsrc     [ -signer key-id ] [ -upload dest ]                                              -- creates a debian source package
-   nsis                                                                                        -- creates a Windows NSIS installer
-   aar        [ -local ] [ -sign key-id ] [-deploy repo] [ -upload dest ]                      -- creates an Android archive
-   xcode      [ -local ] [ -sign key-id ] [-deploy repo] [ -upload dest ]                      -- creates an iOS XCode framework
-   xgo        [ -alltools ] [ options ]                                                        -- cross builds according to options
-   purge      [ -store blobstore ] [ -days threshold ]                                         -- purges old archives from the blobstore
-
-For all commands, -n prevents execution of external programs (dry run mode).
-
-*/
 package main
 
 import (
@@ -58,12 +18,14 @@ import (
 	"strings"
 	"time"
 
-	"../internal/build"
+	"github.com/cespare/cp"
+	"github.com/cypherium/cypherBFT/internal/build"
+	"github.com/cypherium/cypherBFT/params"
 )
 
 var (
 	// Files that end up in the cypher*.zip archive.
-	gcphArchiveFiles = []string{
+	cypherArchiveFiles = []string{
 		"COPYING",
 		executablePath("cypher"),
 	}
@@ -75,54 +37,77 @@ var (
 		executablePath("bootnode"),
 		executablePath("evm"),
 		executablePath("cypher"),
-		//		executablePath("puppeth"),
+		executablePath("puppeth"),
 		executablePath("rlpdump"),
-		executablePath("swarm"),
-		executablePath("wnode"),
+		executablePath("clef"),
 	}
 
 	// A debian package is created for all executables listed here.
 	debExecutables = []debExecutable{
 		{
-			Name:        "abigen",
+			BinaryName:  "abigen",
 			Description: "Source code generator to convert Cypherium contract definitions into easy to use, compile-time type-safe Go packages.",
 		},
 		{
-			Name:        "bootnode",
+			BinaryName:  "bootnode",
 			Description: "Cypherium bootnode.",
 		},
 		{
-			Name:        "evm",
+			BinaryName:  "evm",
 			Description: "Developer utility version of the EVM (Cypherium Virtual Machine) that is capable of running bytecode snippets within a configurable environment and execution mode.",
 		},
 		{
-			Name:        "cypher",
+			BinaryName:  "cypher",
 			Description: "Cypherium CLI client.",
 		},
 		{
-			Name:        "puppeth",
+			BinaryName:  "puppeth",
 			Description: "Cypherium private network manager.",
 		},
 		{
-			Name:        "rlpdump",
+			BinaryName:  "rlpdump",
 			Description: "Developer utility tool that prints RLP structures.",
 		},
 		{
-			Name:        "swarm",
-			Description: "Cypherium Swarm daemon and tools",
+			BinaryName:  "clef",
+			Description: "Cypherium account management tool.",
 		},
-		{
-			Name:        "wnode",
-			Description: "Cypherium Whisper diagnostic tool",
-		},
+	}
+
+	// A debian package is created for all executables listed here.
+
+	debEthereum = debPackage{
+		Name:        "cypherium",
+		Version:     params.Version,
+		Executables: debExecutables,
+	}
+
+	// Debian meta packages to build and push to Ubuntu PPA
+	debPackages = []debPackage{
+		debEthereum,
 	}
 
 	// Distros for which packages are created.
 	// Note: vivid is unsupported because there is no golang-1.6 package for it.
-	// Note: wily is unsupported because it was officially deprecated on lanchpad.
-	// Note: yakkety is unsupported because it was officially deprecated on lanchpad.
-	// Note: zesty is unsupported because it was officially deprecated on lanchpad.
-	debDistros = []string{"trusty", "xenial", "artful", "bionic"}
+	// Note: wily is unsupported because it was officially deprecated on Launchpad.
+	// Note: yakkety is unsupported because it was officially deprecated on Launchpad.
+	// Note: zesty is unsupported because it was officially deprecated on Launchpad.
+	// Note: artful is unsupported because it was officially deprecated on Launchpad.
+	// Note: cosmic is unsupported because it was officially deprecated on Launchpad.
+	// Note: disco is unsupported because it was officially deprecated on Launchpad.
+	debDistroGoBoots = map[string]string{
+		"trusty": "golang-1.11",
+		"xenial": "golang-go",
+		"bionic": "golang-go",
+		"eoan":   "golang-go",
+		"focal":  "golang-go",
+		"groovy": "golang-go",
+	}
+
+	debGoBootPaths = map[string]string{
+		"golang-1.11": "/usr/lib/go-1.11",
+		"golang-go":   "/usr/lib/go",
+	}
 )
 
 var GOBIN, _ = filepath.Abs(filepath.Join("build", "bin"))
@@ -198,24 +183,22 @@ func doInstall(cmdline []string) {
 	if flag.NArg() > 0 {
 		packages = flag.Args()
 	}
-	packages = build.ExpandPackagesNoVendor(packages)
 
 	if *arch == "" || *arch == runtime.GOARCH {
 		goinstall := goTool("install", buildFlags(env)...)
+		if runtime.GOARCH == "arm64" {
+			goinstall.Args = append(goinstall.Args, "-p", "1")
+		}
+		goinstall.Args = append(goinstall.Args, "-trimpath")
 		goinstall.Args = append(goinstall.Args, "-v")
 		goinstall.Args = append(goinstall.Args, packages...)
 		build.MustRun(goinstall)
 		return
 	}
-	// If we are cross compiling to ARMv5 ARMv6 or ARMv7, clean any previous builds
-	if *arch == "arm" {
-		os.RemoveAll(filepath.Join(runtime.GOROOT(), "pkg", runtime.GOOS+"_arm"))
-		for _, path := range filepath.SplitList(build.GOPATH()) {
-			os.RemoveAll(filepath.Join(path, "pkg", runtime.GOOS+"_arm"))
-		}
-	}
+
 	// Seems we are cross compiling, work around forbidden GOBIN
 	goinstall := goToolArch(*arch, *cc, "install", buildFlags(env)...)
+	goinstall.Args = append(goinstall.Args, "-trimpath")
 	goinstall.Args = append(goinstall.Args, "-v")
 	goinstall.Args = append(goinstall.Args, []string{"-buildmode", "archive"}...)
 	goinstall.Args = append(goinstall.Args, packages...)
@@ -245,6 +228,7 @@ func buildFlags(env build.Environment) (flags []string) {
 	var ld []string
 	if env.Commit != "" {
 		ld = append(ld, "-X", "main.gitCommit="+env.Commit)
+		ld = append(ld, "-X", "main.gitDate="+env.Date)
 	}
 	if runtime.GOOS == "darwin" {
 		ld = append(ld, "-s")
@@ -262,7 +246,6 @@ func goTool(subcmd string, args ...string) *exec.Cmd {
 
 func goToolArch(arch string, cc string, subcmd string, args ...string) *exec.Cmd {
 	cmd := build.GoTool(subcmd, args...)
-	cmd.Env = []string{"GOPATH=" + build.GOPATH()}
 	if arch == "" || arch == runtime.GOARCH {
 		cmd.Env = append(cmd.Env, "GOBIN="+GOBIN)
 	} else {
@@ -273,7 +256,7 @@ func goToolArch(arch string, cc string, subcmd string, args ...string) *exec.Cmd
 		cmd.Env = append(cmd.Env, "CC="+cc)
 	}
 	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "GOPATH=") || strings.HasPrefix(e, "GOBIN=") {
+		if strings.HasPrefix(e, "GOBIN=") {
 			continue
 		}
 		cmd.Env = append(cmd.Env, e)
@@ -286,9 +269,8 @@ func goToolArch(arch string, cc string, subcmd string, args ...string) *exec.Cmd
 // "tests" also includes static analysis tools such as vet.
 
 func doTest(cmdline []string) {
-	var (
-		coverage = flag.Bool("coverage", false, "Whether to record code coverage")
-	)
+	coverage := flag.Bool("coverage", false, "Whether to record code coverage")
+	verbose := flag.Bool("v", false, "Whether to log verbosely")
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
 
@@ -296,67 +278,64 @@ func doTest(cmdline []string) {
 	if len(flag.CommandLine.Args()) > 0 {
 		packages = flag.CommandLine.Args()
 	}
-	packages = build.ExpandPackagesNoVendor(packages)
-
-	// Run analysis tools before the tests.
-	build.MustRun(goTool("vet", packages...))
 
 	// Run the actual tests.
-	gotest := goTool("test", buildFlags(env)...)
 	// Test a single package at a time. CI builders are slow
 	// and some tests run into timeouts under load.
+	gotest := goTool("test", buildFlags(env)...)
 	gotest.Args = append(gotest.Args, "-p", "1")
 	if *coverage {
 		gotest.Args = append(gotest.Args, "-covermode=atomic", "-cover")
+	}
+	if *verbose {
+		gotest.Args = append(gotest.Args, "-v")
 	}
 
 	gotest.Args = append(gotest.Args, packages...)
 	build.MustRun(gotest)
 }
 
-// runs gometalinter on requested packages
+// doLint runs golangci-lint on requested packages.
 func doLint(cmdline []string) {
+	var (
+		cachedir = flag.String("cachedir", "./build/cache", "directory for caching golangci-lint binary.")
+	)
 	flag.CommandLine.Parse(cmdline)
-
 	packages := []string{"./..."}
 	if len(flag.CommandLine.Args()) > 0 {
 		packages = flag.CommandLine.Args()
 	}
-	// Get metalinter and install all supported linters
-	build.MustRun(goTool("get", "gopkg.in/alecthomas/gometalinter.v2"))
-	build.MustRunCommand(filepath.Join(GOBIN, "gometalinter.v2"), "--install")
 
-	// Run fast linters batched together
-	configs := []string{
-		"--vendor",
-		"--tests",
-		"--deadline=2m",
-		"--disable-all",
-		"--enable=goimports",
-		"--enable=varcheck",
-		"--enable=vet",
-		"--enable=gofmt",
-		"--enable=misspell",
-		"--enable=goconst",
-		"--min-occurrences=6", // for goconst
-	}
-	build.MustRunCommand(filepath.Join(GOBIN, "gometalinter.v2"), append(configs, packages...)...)
+	linter := downloadLinter(*cachedir)
+	lflags := []string{"run", "--config", ".golangci.yml"}
+	build.MustRunCommand(linter, append(lflags, packages...)...)
+	fmt.Println("You have achieved perfection.")
+}
 
-	// Run slow linters one by one
-	for _, linter := range []string{"unconvert", "gosimple"} {
-		configs = []string{"--vendor", "--tests", "--deadline=10m", "--disable-all", "--enable=" + linter}
-		build.MustRunCommand(filepath.Join(GOBIN, "gometalinter.v2"), append(configs, packages...)...)
+// downloadLinter downloads and unpacks golangci-lint.
+func downloadLinter(cachedir string) string {
+	const version = "1.27.0"
+
+	csdb := build.MustLoadChecksums("build/checksums.txt")
+	base := fmt.Sprintf("golangci-lint-%s-%s-%s", version, runtime.GOOS, runtime.GOARCH)
+	url := fmt.Sprintf("https://github.com/golangci/golangci-lint/releases/download/v%s/%s.tar.gz", version, base)
+	archivePath := filepath.Join(cachedir, base+".tar.gz")
+	if err := csdb.DownloadFile(url, archivePath); err != nil {
+		log.Fatal(err)
 	}
+	if err := build.ExtractTarballArchive(archivePath, cachedir); err != nil {
+		log.Fatal(err)
+	}
+	return filepath.Join(cachedir, base, "golangci-lint")
 }
 
 // Release Packaging
-
 func doArchive(cmdline []string) {
 	var (
 		arch   = flag.String("arch", runtime.GOARCH, "Architecture cross packaging")
 		atype  = flag.String("type", "zip", "Type of archive to write (zip|tar)")
 		signer = flag.String("signer", "", `Environment variable holding the signing key (e.g. LINUX_SIGNING_KEY)`)
-		upload = flag.String("upload", "", `Destination to upload the archives (usually "gcphstore/builds")`)
+		upload = flag.String("upload", "", `Destination to upload the archives (usually "cypherstore/builds")`)
 		ext    string
 	)
 	flag.CommandLine.Parse(cmdline)
@@ -370,13 +349,14 @@ func doArchive(cmdline []string) {
 	}
 
 	var (
-		env      = build.Env()
-		base     = archiveBasename(*arch, env)
-		cypher   = "cypher-" + base + ext
-		alltools = "cypher-alltools-" + base + ext
+		env = build.Env()
+
+		basecypher = archiveBasename(*arch, params.ArchiveVersion(env.Commit))
+		cypher     = "cypher-" + basecypher + ext
+		alltools   = "cypher-alltools-" + basecypher + ext
 	)
 	maybeSkipArchive(env)
-	if err := build.WriteArchive(cypher, gcphArchiveFiles); err != nil {
+	if err := build.WriteArchive(cypher, cypherArchiveFiles); err != nil {
 		log.Fatal(err)
 	}
 	if err := build.WriteArchive(alltools, allToolsArchiveFiles); err != nil {
@@ -389,7 +369,7 @@ func doArchive(cmdline []string) {
 	}
 }
 
-func archiveBasename(arch string, env build.Environment) string {
+func archiveBasename(arch string, archiveVersion string) string {
 	platform := runtime.GOOS + "-" + arch
 	if arch == "arm" {
 		platform += os.Getenv("GOARM")
@@ -400,28 +380,14 @@ func archiveBasename(arch string, env build.Environment) string {
 	if arch == "ios" {
 		platform = "ios-all"
 	}
-	return platform + "-" + archiveVersion(env)
-}
-
-func archiveVersion(env build.Environment) string {
-	version := build.VERSION()
-	if isUnstableBuild(env) {
-		version += "-unstable"
-	}
-	if env.Commit != "" {
-		version += "-" + env.Commit[:8]
-	}
-	return version
+	return platform + "-" + archiveVersion
 }
 
 func archiveUpload(archive string, blobstore string, signer string) error {
 	// If signing was requested, generate the signature files
 	if signer != "" {
-		pgpkey, err := base64.StdEncoding.DecodeString(os.Getenv(signer))
-		if err != nil {
-			return fmt.Errorf("invalid base64 %s", signer)
-		}
-		if err := build.PGPSignFile(archive, archive+".asc", string(pgpkey)); err != nil {
+		key := getenvBase64(signer)
+		if err := build.PGPSignFile(archive, archive+".asc", string(key)); err != nil {
 			return err
 		}
 	}
@@ -461,13 +427,15 @@ func maybeSkipArchive(env build.Environment) {
 }
 
 // Debian Packaging
-
 func doDebianSource(cmdline []string) {
 	var (
-		signer  = flag.String("signer", "", `Signing key name, also used as package author`)
-		upload  = flag.String("upload", "", `Where to upload the source package (usually "ppa:cypherium/cypherium")`)
-		workdir = flag.String("workdir", "", `Output directory for packages (uses temp dir if unset)`)
-		now     = time.Now()
+		goversion = flag.String("goversion", "", `Go version to build with (will be included in the source package)`)
+		cachedir  = flag.String("cachedir", "./build/cache", `Filesystem path to cache the downloaded Go bundles at`)
+		signer    = flag.String("signer", "", `Signing key name, also used as package author`)
+		upload    = flag.String("upload", "", `Where to upload the source package (usually "cypherium/cypherium")`)
+		sshUser   = flag.String("sftp-user", "", `Username for SFTP upload (usually "cypher-ci")`)
+		workdir   = flag.String("workdir", "", `Output directory for packages (uses temp dir if unset)`)
+		now       = time.Now()
 	)
 	flag.CommandLine.Parse(cmdline)
 	*workdir = makeWorkdir(*workdir)
@@ -475,33 +443,105 @@ func doDebianSource(cmdline []string) {
 	maybeSkipArchive(env)
 
 	// Import the signing key.
-	if b64key := os.Getenv("PPA_SIGNING_KEY"); b64key != "" {
-		key, err := base64.StdEncoding.DecodeString(b64key)
-		if err != nil {
-			log.Fatal("invalid base64 PPA_SIGNING_KEY")
-		}
+	if key := getenvBase64("PPA_SIGNING_KEY"); len(key) > 0 {
 		gpg := exec.Command("gpg", "--import")
 		gpg.Stdin = bytes.NewReader(key)
 		build.MustRun(gpg)
 	}
 
-	// Create the packages.
-	for _, distro := range debDistros {
-		meta := newDebMetadata(distro, *signer, env, now)
-		pkgdir := stageDebianSource(*workdir, meta)
-		debuild := exec.Command("debuild", "-S", "-sa", "-us", "-uc")
-		debuild.Dir = pkgdir
-		build.MustRun(debuild)
+	// Download and verify the Go source package.
+	gobundle := downloadGoSources(*goversion, *cachedir)
 
-		changes := fmt.Sprintf("%s_%s_source.changes", meta.Name(), meta.VersionString())
-		changes = filepath.Join(*workdir, changes)
-		if *signer != "" {
-			build.MustRunCommand("debsign", changes)
-		}
-		if *upload != "" {
-			build.MustRunCommand("dput", *upload, changes)
+	// Download all the dependencies needed to build the sources and run the ci script
+	srcdepfetch := goTool("install", "-n", "./...")
+	srcdepfetch.Env = append(os.Environ(), "GOPATH="+filepath.Join(*workdir, "modgopath"))
+	build.MustRun(srcdepfetch)
+
+	cidepfetch := goTool("run", "./build/ci.go")
+	cidepfetch.Env = append(os.Environ(), "GOPATH="+filepath.Join(*workdir, "modgopath"))
+	cidepfetch.Run() // Command fails, don't care, we only need the deps to start it
+
+	// Create Debian packages and upload them.
+	for _, pkg := range debPackages {
+		for distro, goboot := range debDistroGoBoots {
+			// Prepare the debian package with the cypherBFT sources.
+			meta := newDebMetadata(distro, goboot, *signer, env, now, pkg.Name, pkg.Version, pkg.Executables)
+			pkgdir := stageDebianSource(*workdir, meta)
+
+			// Add Go source code
+			if err := build.ExtractTarballArchive(gobundle, pkgdir); err != nil {
+				log.Fatalf("Failed to extract Go sources: %v", err)
+			}
+			if err := os.Rename(filepath.Join(pkgdir, "go"), filepath.Join(pkgdir, ".go")); err != nil {
+				log.Fatalf("Failed to rename Go source folder: %v", err)
+			}
+			// Add all dependency modules in compressed form
+			os.MkdirAll(filepath.Join(pkgdir, ".mod", "cache"), 0755)
+			if err := cp.CopyAll(filepath.Join(pkgdir, ".mod", "cache", "download"), filepath.Join(*workdir, "modgopath", "pkg", "mod", "cache", "download")); err != nil {
+				log.Fatalf("Failed to copy Go module dependencies: %v", err)
+			}
+			// Run the packaging and upload to the PPA
+			debuild := exec.Command("debuild", "-S", "-sa", "-us", "-uc", "-d", "-Zxz", "-nc")
+			debuild.Dir = pkgdir
+			build.MustRun(debuild)
+
+			var (
+				basename = fmt.Sprintf("%s_%s", meta.Name(), meta.VersionString())
+				source   = filepath.Join(*workdir, basename+".tar.xz")
+				dsc      = filepath.Join(*workdir, basename+".dsc")
+				changes  = filepath.Join(*workdir, basename+"_source.changes")
+			)
+			if *signer != "" {
+				build.MustRunCommand("debsign", changes)
+			}
+			if *upload != "" {
+				ppaUpload(*workdir, *upload, *sshUser, []string{source, dsc, changes})
+			}
 		}
 	}
+}
+
+func downloadGoSources(version string, cachedir string) string {
+	csdb := build.MustLoadChecksums("build/checksums.txt")
+	file := fmt.Sprintf("go%s.src.tar.gz", version)
+	url := "https://dl.google.com/go/" + file
+	dst := filepath.Join(cachedir, file)
+	if err := csdb.DownloadFile(url, dst); err != nil {
+		log.Fatal(err)
+	}
+	return dst
+}
+
+func ppaUpload(workdir, ppa, sshUser string, files []string) {
+	p := strings.Split(ppa, "/")
+	if len(p) != 2 {
+		log.Fatal("-upload PPA name must contain single /")
+	}
+	if sshUser == "" {
+		sshUser = p[0]
+	}
+	incomingDir := fmt.Sprintf("~%s/ubuntu/%s", p[0], p[1])
+	// Create the SSH identity file if it doesn't exist.
+	var idfile string
+	if sshkey := getenvBase64("PPA_SSH_KEY"); len(sshkey) > 0 {
+		idfile = filepath.Join(workdir, "sshkey")
+		if _, err := os.Stat(idfile); os.IsNotExist(err) {
+			ioutil.WriteFile(idfile, sshkey, 0600)
+		}
+	}
+	// Upload
+	dest := sshUser + "@ppa.launchpad.net"
+	if err := build.UploadSFTP(idfile, dest, incomingDir, files); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func getenvBase64(variable string) []byte {
+	dec, err := base64.StdEncoding.DecodeString(os.Getenv(variable))
+	if err != nil {
+		log.Fatal("invalid base64 " + variable)
+	}
+	return []byte(dec)
 }
 
 func makeWorkdir(wdflag string) string {
@@ -524,8 +564,18 @@ func isUnstableBuild(env build.Environment) bool {
 	return true
 }
 
+type debPackage struct {
+	Name        string          // the name of the Debian package to produce, e.g. "cypherium"
+	Version     string          // the clean version of the debPackage, e.g. 1.8.12, without any metadata
+	Executables []debExecutable // executables to be included in the package
+}
+
 type debMetadata struct {
-	Env build.Environment
+	Env           build.Environment
+	GoBootPackage string
+	GoBootPath    string
+
+	PackageName string
 
 	// cypherBFT version being built. Note that this
 	// is not the debian package version. The package version
@@ -538,21 +588,35 @@ type debMetadata struct {
 }
 
 type debExecutable struct {
-	Name, Description string
+	PackageName string
+	BinaryName  string
+	Description string
 }
 
-func newDebMetadata(distro, author string, env build.Environment, t time.Time) debMetadata {
+// Package returns the name of the package if present, or
+// fallbacks to BinaryName
+func (d debExecutable) Package() string {
+	if d.PackageName != "" {
+		return d.PackageName
+	}
+	return d.BinaryName
+}
+
+func newDebMetadata(distro, goboot, author string, env build.Environment, t time.Time, name string, version string, exes []debExecutable) debMetadata {
 	if author == "" {
 		// No signing key, use default author.
 		author = "Cypherium Builds <fjl@cypherium.org>"
 	}
 	return debMetadata{
-		Env:         env,
-		Author:      author,
-		Distro:      distro,
-		Version:     build.VERSION(),
-		Time:        t.Format(time.RFC1123Z),
-		Executables: debExecutables,
+		GoBootPackage: goboot,
+		GoBootPath:    debGoBootPaths[goboot],
+		PackageName:   name,
+		Env:           env,
+		Author:        author,
+		Distro:        distro,
+		Version:       version,
+		Time:          t.Format(time.RFC1123Z),
+		Executables:   exes,
 	}
 }
 
@@ -560,9 +624,9 @@ func newDebMetadata(distro, author string, env build.Environment, t time.Time) d
 // on all executable packages.
 func (meta debMetadata) Name() string {
 	if isUnstableBuild(meta.Env) {
-		return "cypherium-unstable"
+		return meta.PackageName + "-unstable"
 	}
-	return "cypherium"
+	return meta.PackageName
 }
 
 // VersionString returns the debian version of the packages.
@@ -589,9 +653,9 @@ func (meta debMetadata) ExeList() string {
 // ExeName returns the package name of an executable package.
 func (meta debMetadata) ExeName(exe debExecutable) string {
 	if isUnstableBuild(meta.Env) {
-		return exe.Name + "-unstable"
+		return exe.Package() + "-unstable"
 	}
-	return exe.Name
+	return exe.Package()
 }
 
 // ExeConflicts returns the content of the Conflicts field
@@ -606,7 +670,7 @@ func (meta debMetadata) ExeConflicts(exe debExecutable) string {
 		// be preferred and the conflicting files should be handled via
 		// alternates. We might do this eventually but using a conflict is
 		// easier now.
-		return "cypherium, " + exe.Name
+		return "cypherium, " + exe.Package()
 	}
 	return ""
 }
@@ -617,36 +681,33 @@ func stageDebianSource(tmpdir string, meta debMetadata) (pkgdir string) {
 	if err := os.Mkdir(pkgdir, 0755); err != nil {
 		log.Fatal(err)
 	}
-
 	// Copy the source code.
 	build.MustRunCommand("git", "checkout-index", "-a", "--prefix", pkgdir+string(filepath.Separator))
 
 	// Put the debian build files in place.
 	debian := filepath.Join(pkgdir, "debian")
-	build.Render("build/deb.rules", filepath.Join(debian, "rules"), 0755, meta)
-	build.Render("build/deb.changelog", filepath.Join(debian, "changelog"), 0644, meta)
-	build.Render("build/deb.control", filepath.Join(debian, "control"), 0644, meta)
-	build.Render("build/deb.copyright", filepath.Join(debian, "copyright"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.rules", filepath.Join(debian, "rules"), 0755, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.changelog", filepath.Join(debian, "changelog"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.control", filepath.Join(debian, "control"), 0644, meta)
+	build.Render("build/deb/"+meta.PackageName+"/deb.copyright", filepath.Join(debian, "copyright"), 0644, meta)
 	build.RenderString("8\n", filepath.Join(debian, "compat"), 0644, meta)
 	build.RenderString("3.0 (native)\n", filepath.Join(debian, "source/format"), 0644, meta)
 	for _, exe := range meta.Executables {
 		install := filepath.Join(debian, meta.ExeName(exe)+".install")
 		docs := filepath.Join(debian, meta.ExeName(exe)+".docs")
-		build.Render("build/deb.install", install, 0644, exe)
-		build.Render("build/deb.docs", docs, 0644, exe)
+		build.Render("build/deb/"+meta.PackageName+"/deb.install", install, 0644, exe)
+		build.Render("build/deb/"+meta.PackageName+"/deb.docs", docs, 0644, exe)
 	}
-
 	return pkgdir
 }
 
 // Windows installer
-
 func doWindowsInstaller(cmdline []string) {
 	// Parse the flags and make skip installer generation on PRs
 	var (
 		arch    = flag.String("arch", runtime.GOARCH, "Architecture for cross build packaging")
 		signer  = flag.String("signer", "", `Environment variable holding the signing key (e.g. WINDOWS_SIGNING_KEY)`)
-		upload  = flag.String("upload", "", `Destination to upload the archives (usually "gcphstore/builds")`)
+		upload  = flag.String("upload", "", `Destination to upload the archives (usually "cypherstore/builds")`)
 		workdir = flag.String("workdir", "", `Output directory for packages (uses temp dir if unset)`)
 	)
 	flag.CommandLine.Parse(cmdline)
@@ -656,9 +717,9 @@ func doWindowsInstaller(cmdline []string) {
 
 	// Aggregate binaries that are included in the installer
 	var (
-		devTools []string
-		allTools []string
-		gcphTool string
+		devTools   []string
+		allTools   []string
+		cypherTool string
 	)
 	for _, file := range allToolsArchiveFiles {
 		if file == "COPYING" { // license, copied later
@@ -666,7 +727,7 @@ func doWindowsInstaller(cmdline []string) {
 		}
 		allTools = append(allTools, filepath.Base(file))
 		if filepath.Base(file) == "cypher.exe" {
-			gcphTool = file
+			cypherTool = file
 		} else {
 			devTools = append(devTools, file)
 		}
@@ -676,7 +737,7 @@ func doWindowsInstaller(cmdline []string) {
 	// first section contains the cypher binary, second section holds the dev tools.
 	templateData := map[string]interface{}{
 		"License":  "COPYING",
-		"Cypher":   gcphTool,
+		"Cypher":   cypherTool,
 		"DevTools": devTools,
 	}
 	build.Render("build/nsis.cypher.nsi", filepath.Join(*workdir, "cypher.nsi"), 0644, nil)
@@ -684,17 +745,20 @@ func doWindowsInstaller(cmdline []string) {
 	build.Render("build/nsis.uninstall.nsh", filepath.Join(*workdir, "uninstall.nsh"), 0644, allTools)
 	build.Render("build/nsis.pathupdate.nsh", filepath.Join(*workdir, "PathUpdate.nsh"), 0644, nil)
 	build.Render("build/nsis.envvarupdate.nsh", filepath.Join(*workdir, "EnvVarUpdate.nsh"), 0644, nil)
-	build.CopyFile(filepath.Join(*workdir, "SimpleFC.dll"), "build/nsis.simplefc.dll", 0755)
-	build.CopyFile(filepath.Join(*workdir, "COPYING"), "COPYING", 0755)
-
+	if err := cp.CopyFile(filepath.Join(*workdir, "SimpleFC.dll"), "build/nsis.simplefc.dll"); err != nil {
+		log.Fatal("Failed to copy SimpleFC.dll: %v", err)
+	}
+	if err := cp.CopyFile(filepath.Join(*workdir, "COPYING"), "COPYING"); err != nil {
+		log.Fatal("Failed to copy copyright note: %v", err)
+	}
 	// Build the installer. This assumes that all the needed files have been previously
 	// built (don't mix building and packaging to keep cross compilation complexity to a
 	// minimum).
-	version := strings.Split(build.VERSION(), ".")
+	version := strings.Split(params.Version, ".")
 	if env.Commit != "" {
 		version[2] += "-" + env.Commit[:8]
 	}
-	installer, _ := filepath.Abs("cypher-" + archiveBasename(*arch, env) + ".exe")
+	installer, _ := filepath.Abs("cypher-" + archiveBasename(*arch, params.ArchiveVersion(env.Commit)) + ".exe")
 	build.MustRunCommand("makensis.exe",
 		"/DOUTPUTFILE="+installer,
 		"/DMAJORVERSION="+version[0],
@@ -703,7 +767,6 @@ func doWindowsInstaller(cmdline []string) {
 		"/DARCH="+*arch,
 		filepath.Join(*workdir, "cypher.nsi"),
 	)
-
 	// Sign and publish installer.
 	if err := archiveUpload(installer, *upload, *signer); err != nil {
 		log.Fatal(err)
@@ -717,7 +780,7 @@ func doAndroidArchive(cmdline []string) {
 		local  = flag.Bool("local", false, `Flag whether we're only doing a local build (skip Maven artifacts)`)
 		signer = flag.String("signer", "", `Environment variable holding the signing key (e.g. ANDROID_SIGNING_KEY)`)
 		deploy = flag.String("deploy", "", `Destination to deploy the archive (usually "https://oss.sonatype.org")`)
-		upload = flag.String("upload", "", `Destination to upload the archive (usually "gcphstore/builds")`)
+		upload = flag.String("upload", "", `Destination to upload the archive (usually "cypherstore/builds")`)
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -726,17 +789,14 @@ func doAndroidArchive(cmdline []string) {
 	if os.Getenv("ANDROID_HOME") == "" {
 		log.Fatal("Please ensure ANDROID_HOME points to your Android SDK")
 	}
-	if os.Getenv("ANDROID_NDK") == "" {
-		log.Fatal("Please ensure ANDROID_NDK points to your Android NDK")
-	}
 	// Build the Android archive and Maven resources
 	build.MustRun(goTool("get", "golang.org/x/mobile/cmd/gomobile", "golang.org/x/mobile/cmd/gobind"))
-	build.MustRun(gomobileTool("init", "--ndk", os.Getenv("ANDROID_NDK")))
 	build.MustRun(gomobileTool("bind", "-ldflags", "-s -w", "--target", "android", "--javapkg", "org.cypherium", "-v", "github.com/cypherium/cypherBFT/mobile"))
 
 	if *local {
 		// If we're building locally, copy bundle to build dir and skip Maven
 		os.Rename("cypher.aar", filepath.Join(GOBIN, "cypher.aar"))
+		os.Rename("cypher-sources.jar", filepath.Join(GOBIN, "cypher-sources.jar"))
 		return
 	}
 	meta := newMavenMetadata(env)
@@ -746,7 +806,7 @@ func doAndroidArchive(cmdline []string) {
 	maybeSkipArchive(env)
 
 	// Sign and upload the archive to Azure
-	archive := "cypher-" + archiveBasename("android", env) + ".aar"
+	archive := "cypher-" + archiveBasename("android", params.ArchiveVersion(env.Commit)) + ".aar"
 	os.Rename("cypher.aar", archive)
 
 	if err := archiveUpload(archive, *upload, *signer); err != nil {
@@ -756,15 +816,10 @@ func doAndroidArchive(cmdline []string) {
 	os.Rename(archive, meta.Package+".aar")
 	if *signer != "" && *deploy != "" {
 		// Import the signing key into the local GPG instance
-		b64key := os.Getenv(*signer)
-		key, err := base64.StdEncoding.DecodeString(b64key)
-		if err != nil {
-			log.Fatalf("invalid base64 %s", *signer)
-		}
+		key := getenvBase64(*signer)
 		gpg := exec.Command("gpg", "--import")
 		gpg.Stdin = bytes.NewReader(key)
 		build.MustRun(gpg)
-
 		keyID, err := build.PGPKeyID(string(key))
 		if err != nil {
 			log.Fatal(err)
@@ -785,15 +840,15 @@ func gomobileTool(subcmd string, args ...string) *exec.Cmd {
 	cmd := exec.Command(filepath.Join(GOBIN, "gomobile"), subcmd)
 	cmd.Args = append(cmd.Args, args...)
 	cmd.Env = []string{
-		"GOPATH=" + build.GOPATH(),
 		"PATH=" + GOBIN + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}
 	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "GOPATH=") || strings.HasPrefix(e, "PATH=") {
+		if strings.HasPrefix(e, "GOPATH=") || strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "GOBIN=") {
 			continue
 		}
 		cmd.Env = append(cmd.Env, e)
 	}
+	cmd.Env = append(cmd.Env, "GOBIN="+GOBIN)
 	return cmd
 }
 
@@ -831,7 +886,7 @@ func newMavenMetadata(env build.Environment) mavenMetadata {
 		}
 	}
 	// Render the version and package strings
-	version := build.VERSION()
+	version := params.Version
 	if isUnstableBuild(env) {
 		version += "-SNAPSHOT"
 	}
@@ -850,7 +905,7 @@ func doXCodeFramework(cmdline []string) {
 		local  = flag.Bool("local", false, `Flag whether we're only doing a local build (skip Maven artifacts)`)
 		signer = flag.String("signer", "", `Environment variable holding the signing key (e.g. IOS_SIGNING_KEY)`)
 		deploy = flag.String("deploy", "", `Destination to deploy the archive (usually "trunk")`)
-		upload = flag.String("upload", "", `Destination to upload the archives (usually "gcphstore/builds")`)
+		upload = flag.String("upload", "", `Destination to upload the archives (usually "cypherstore/builds")`)
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -858,15 +913,15 @@ func doXCodeFramework(cmdline []string) {
 	// Build the iOS XCode framework
 	build.MustRun(goTool("get", "golang.org/x/mobile/cmd/gomobile", "golang.org/x/mobile/cmd/gobind"))
 	build.MustRun(gomobileTool("init"))
-	bind := gomobileTool("bind", "-ldflags", "-s -w", "--target", "ios", "--tags", "ios", "-v", "github.com/cypherium/cypherBFT/mobile")
+	bind := gomobileTool("bind", "-ldflags", "-s -w", "--target", "ios", "-v", "github.com/cypherium/cypherBFT/mobile")
 
 	if *local {
 		// If we're building locally, use the build folder and stop afterwards
-		bind.Dir, _ = filepath.Abs(GOBIN)
+		bind.Dir = GOBIN
 		build.MustRun(bind)
 		return
 	}
-	archive := "cypher-" + archiveBasename("ios", env)
+	archive := "cypher-" + archiveBasename("ios", params.ArchiveVersion(env.Commit))
 	if err := os.Mkdir(archive, os.ModePerm); err != nil {
 		log.Fatal(err)
 	}
@@ -922,7 +977,7 @@ func newPodMetadata(env build.Environment, archive string) podMetadata {
 			}
 		}
 	}
-	version := build.VERSION()
+	version := params.Version
 	if isUnstableBuild(env) {
 		version += "-unstable." + env.Buildnum
 	}
@@ -973,16 +1028,10 @@ func doXgo(cmdline []string) {
 
 func xgoTool(args []string) *exec.Cmd {
 	cmd := exec.Command(filepath.Join(GOBIN, "xgo"), args...)
-	cmd.Env = []string{
-		"GOPATH=" + build.GOPATH(),
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, []string{
 		"GOBIN=" + GOBIN,
-	}
-	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "GOPATH=") || strings.HasPrefix(e, "GOBIN=") {
-			continue
-		}
-		cmd.Env = append(cmd.Env, e)
-	}
+	}...)
 	return cmd
 }
 
@@ -990,8 +1039,8 @@ func xgoTool(args []string) *exec.Cmd {
 
 func doPurge(cmdline []string) {
 	var (
-		store = flag.String("store", "", `Destination from where to purge archives (usually "gcphstore/builds")`)
-		limit = flag.Int("days", 30, `Age threshold above which to delete unstalbe archives`)
+		store = flag.String("store", "", `Destination from where to purge archives (usually "cypherstore/builds")`)
+		//limit = flag.Int("days", 30, `Age threshold above which to delete unstable archives`)
 	)
 	flag.CommandLine.Parse(cmdline)
 
@@ -1009,6 +1058,8 @@ func doPurge(cmdline []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Printf("Found %d blobs\n", len(blobs))
+
 	// Iterate over the blobs, collect and sort all unstable builds
 	for i := 0; i < len(blobs); i++ {
 		if !strings.Contains(blobs[i].Name, "unstable") {
@@ -1016,29 +1067,23 @@ func doPurge(cmdline []string) {
 			i--
 		}
 	}
-	for i := 0; i < len(blobs); i++ {
-		for j := i + 1; j < len(blobs); j++ {
-			iTime, err := time.Parse(time.RFC1123, blobs[i].Properties.LastModified)
-			if err != nil {
-				log.Fatal(err)
-			}
-			jTime, err := time.Parse(time.RFC1123, blobs[j].Properties.LastModified)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if iTime.After(jTime) {
-				blobs[i], blobs[j] = blobs[j], blobs[i]
-			}
-		}
-	}
+	//for i := 0; i < len(blobs); i++ {
+	//	for j := i + 1; j < len(blobs); j++ {
+	//		if blobs[i].Properties.LastModified.After(blobs[j].Properties.LastModified) {
+	//			blobs[i], blobs[j] = blobs[j], blobs[i]
+	//		}
+	//	}
+	//}
+
 	// Filter out all archives more recent that the given threshold
-	for i, blob := range blobs {
-		timestamp, _ := time.Parse(time.RFC1123, blob.Properties.LastModified)
-		if time.Since(timestamp) < time.Duration(*limit)*24*time.Hour {
-			blobs = blobs[:i]
-			break
-		}
-	}
+	//for i, blob := range blobs {
+	//	lastModified, _ := strconv.ParseInt(blob.Properties.LastModified, 10, 64)
+	//	if time.Since(big.NewInt(lastModified)) < time.Duration(*limit)*24*time.Hour {
+	//		blobs = blobs[:i]
+	//		break
+	//	}
+	//}
+	fmt.Printf("Deleting %d blobs\n", len(blobs))
 	// Delete all marked as such and return
 	if err := build.AzureBlobstoreDelete(auth, blobs); err != nil {
 		log.Fatal(err)

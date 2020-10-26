@@ -8,8 +8,9 @@
 .PHONY: cypher-darwin cypher-darwin-386 cypher-darwin-amd64
 .PHONY: cypher-windows cypher-windows-386 cypher-windows-amd64
 
-GOBIN = $(shell pwd)/build/bin
+GOBIN = ./build/bin
 GO ?= latest
+GORUN = env GO111MODULE=on go run
 
 cypher:
 	build/env.sh go run build/ci.go install ./cmd/cypher
