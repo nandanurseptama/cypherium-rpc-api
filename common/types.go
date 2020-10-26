@@ -81,6 +81,17 @@ func (h Hash) String() string {
 	return h.Hex()
 }
 
+func (h Hash) TrimBytes() []byte {
+	k := 0
+	for i := 0; i < HashLength; i++ {
+		if h[i] != 0 {
+			k = i
+			break
+		}
+	}
+	return h[k:HashLength]
+}
+
 // Format implements fmt.Formatter, forcing the byte slice to be formatted as is,
 // without going through the stringer interface used for logging.
 func (h Hash) Format(s fmt.State, c rune) {

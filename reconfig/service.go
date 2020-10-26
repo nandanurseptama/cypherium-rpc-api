@@ -454,7 +454,6 @@ func (s *Service) handleNetworkMsgReq(env *network.Envelope) {
 
 	if msg.Hmsg != nil {
 		s.addHotstuffMsg(&hotstuffMsg{sid: si, hMsg: msg.Hmsg})
-		//s.feed.Send(hotstuffMsg{sid: si, hMsg: msg.Hmsg})
 		return
 	}
 	s.feed1.Send(committeeMsg{sid: si, cinfo: msg.Cmsg, best: msg.Bmsg})
@@ -856,47 +855,6 @@ func (s *Service) SendRawData1(ps ...interface{}) {
 	}
 }
 
-/*
-//SendRawData found err and ignore next
-func (s *Service) SendRawData(si *network.ServerIdentity, msg *networkMsg, shouldReSend bool) error {
-	id := si.Address.String()
-
-	s.muNetErr.Lock()
-	tm, ok := s.netErrMap[id]
-	s.muNetErr.Unlock()
-
-	if ok {
-		if time.Now().Sub(tm) < params.SendErrReTryTime {
-			return types.ErrSendNotTimeOut
-		}
-		s.muNetErr.Lock()
-		delete(s.netErrMap, id)
-		s.muNetErr.Unlock()
-	}
-	msg.ID = time.Now().UnixNano()
-
-	s.muNetLastMsg.Lock()
-	r, ok := s.netLastMsg[id]
-	if ok {
-		r.msg = msg
-		r.si = si
-	} else {
-		s.netLastMsg[id] = &lastAckMsg{si: si, msg: msg}
-	}
-	s.muNetLastMsg.Unlock()
-
-	err := s.SendRaw(si, msg, false)
-	if err != nil {
-		log.Warn("SendRawData", "couldn't send to", si.Address, "msg ID", msg.ID, "error", err)
-		s.muNetErr.Lock()
-		s.netErrMap[si.String()] = time.Now()
-		s.muNetErr.Unlock()
-	}
-	//	log.Info("SendRawData", "to", si.Address, "ID", msg.ID )
-
-	return err
-}
-*/
 func (s *Service) procBlockDone(txBlock *types.Block, keyblock *types.KeyBlock) {
 	if keyblock == nil {
 		keyblock = s.kbc.CurrentBlock()

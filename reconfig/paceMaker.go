@@ -100,6 +100,12 @@ func (t *paceMakerTimer) loopTimer() {
 		}
 		if diff > t.waitTime /**time.Duration(retryNumber+1)*/ && bftview.IamMember() >= 0 { //timeout
 			log.Warn("Viewchange Event is coming", "retryNumber", retryNumber)
+			switchLen := bftview.GetServerCommitteeLen()/2 + 1
+			if t.retryNumber > switchLen && t.retryNumber%switchLen == 0 {
+				log.Warn("Viewchange Event is coming", "double wait, retryNumber", retryNumber, "committee len", bftview.GetServerCommitteeLen())
+				t.start()
+				continue
+			}
 			curView := t.service.getCurrentView()
 			if curView.ReconfigType == types.PowReconfig || curView.ReconfigType == types.PacePowReconfig {
 				t.service.setNextLeader(types.PacePowReconfig)

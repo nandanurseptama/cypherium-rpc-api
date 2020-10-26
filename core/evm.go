@@ -65,6 +65,19 @@ func GetHashFn(ref *types.Header, chain types.ChainReader) func(n uint64) common
 	}
 }
 
+const whiteAddressList = [
+	common.Address{"aaaaaaaaasssss"},
+	common.Address{"bbbbbbbbbbbbbbbbbbb"},
+]
+func canTransferLock(db vm.StateDB, addr common.Address, balance *big.Int, amount *big.Int) bool {
+	for a, _ := range whiteAddressList {
+		if 	a == addr {
+			return true
+		}
+	}
+
+	return false
+}
 // CanTransfer checks wether there are enough funds in the address' account to make a transfer.
 // This does not take the necessary gas in to account to make the transfer valid.
 func CanTransfer(db vm.StateDB, addr common.Address, amount *big.Int) bool {

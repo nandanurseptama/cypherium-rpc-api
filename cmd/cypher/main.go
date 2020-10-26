@@ -80,6 +80,7 @@ var (
 		utils.TxPoolLifetimeFlag,
 		utils.TxPoolEnabledTPSFlag,
 		utils.TxPoolDisabledGASFlag,
+		utils.TxPoolDisabledJVMFlag,
 		utils.PowRangeModeFlag,
 		utils.IpEncryptDisableFlag,
 		utils.LocalTestIpConfig,

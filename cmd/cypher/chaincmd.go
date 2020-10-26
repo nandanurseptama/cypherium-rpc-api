@@ -175,13 +175,13 @@ func initGenesis(ctx *cli.Context) error {
 
 	keyGenesis := new(core.GenesisKey)
 	if err := json.NewDecoder(file).Decode(keyGenesis); err != nil {
-		utils.Fatalf("invalid genesis file: %v", err)
+		utils.Fatalf("init keychain, invalid genesis file: %v", err)
 	}
 
 	file.Seek(0, 0)
 	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
-		utils.Fatalf("invalid genesis file: %v", err)
+		utils.Fatalf("init blockchain,invalid genesis file: %v", err)
 	}
 
 	// Open an initialise both full and light databases

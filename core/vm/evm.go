@@ -53,6 +53,9 @@ func run(evm *EVM, contract *Contract, input []byte) ([]byte, error) {
 
 	}
 	for _, interpreter := range evm.interpreters {
+		if interpreter == nil {
+			continue
+		}
 		if interpreter.CanRun(contract.Code) {
 			if evm.interpreter != interpreter {
 				// Ensure that the interpreter pointer is set back
@@ -192,10 +195,15 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	}
 	evm.Transfer(evm.StateDB, caller.Address(), to.Address(), value)
 
+	contractCode := evm.StateDB.GetCode(addr)
+	if len(contractCode) == 0 {
+		return nil, gas, nil
+	}
+
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
 	contract := NewContract(caller, to, value, gas)
-	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
+	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), contractCode)
 
 	start := time.Now()
 
@@ -309,7 +317,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	// Make sure the readonly is only set if we aren't in readonly yet
 	// this makes also sure that the readonly flag isn't removed for
 	// child calls.
-	if !evm.interpreter.IsReadOnly() {
+	if evm.interpreter != nil && !evm.interpreter.IsReadOnly() {
 		evm.interpreter.SetReadOnly(true)
 		defer func() { evm.interpreter.SetReadOnly(false) }()
 	}

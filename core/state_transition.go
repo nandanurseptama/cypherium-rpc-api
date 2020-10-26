@@ -82,7 +82,7 @@ func IntrinsicGas(data []byte, contractCreation bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	gas := params.TxGas //params.TxGasContractCreation
 	// Bump the required gas by the amount of transactional data
-	gas += uint64(len(data)) * params.TxDataZeroGas
+	gas += uint64(len(data)) * params.TxDataGas
 	/*
 		if len(data) > 0 {
 			// Zero and non-zero bytes are priced differently

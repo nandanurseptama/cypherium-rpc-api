@@ -269,7 +269,11 @@ var (
 	}
 	TxPoolDisabledGASFlag = cli.BoolFlag{
 		Name:  "nogas",
-		Usage: "Enable automatic calculation of TPS",
+		Usage: "disable gas",
+	}
+	TxPoolDisabledJVMFlag = cli.BoolFlag{
+		Name:  "nojvm",
+		Usage: "disable jvm",
 	}
 	IpEncryptDisableFlag = cli.IntFlag{
 		Name:  "ipencdis",
@@ -970,7 +974,9 @@ func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	if ctx.GlobalIsSet(TxPoolDisabledGASFlag.Name) {
 		params.DisableGAS = ctx.GlobalBool(TxPoolDisabledGASFlag.Name)
 	}
-
+	if ctx.GlobalIsSet(TxPoolDisabledJVMFlag.Name) {
+		params.DisableJVM = ctx.GlobalBool(TxPoolDisabledJVMFlag.Name)
+	}
 }
 
 func SetLocalTestTestIpSw(ctx *cli.Context, cfg *core.LocalTestIpConfig) {

@@ -76,6 +76,8 @@ var (
 	ErrOversizedData = errors.New("oversized data")
 
 	ErrOverSlotsData = errors.New("overslots data")
+
+	ErrLockedFunds = errors.New("locked funds for gas * price + value")
 )
 
 var (
@@ -639,9 +641,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
-		log.Trace("ErrInsufficientFunds", "balance", pool.currentState.GetBalance(from).Uint64(), "cost", tx.Cost().Uint64())
+	balance := pool.currentState.GetBalance(from)
+	amount := tx.Cost()
+	if balance.Cmp(amount) < 0 {
+		log.Trace("ErrInsufficientFunds", "balance", balance.Uint64(), "cost", amount.Uint64())
 		return ErrInsufficientFunds
+	}
+	if !canTransferLock(pool.currentState, from, balance, amount) {
+		log.Trace("ErrLockedFunds", "balance", balance.Uint64(), "cost", amount.Uint64())
+		return ErrLockedFunds
 	}
 	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil)
 	if err != nil {

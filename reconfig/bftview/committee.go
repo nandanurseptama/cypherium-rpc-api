@@ -64,6 +64,7 @@ type CommitteeConfig struct {
 	cacheCommittee   map[uint64]*committeeCache
 	muCommitteeCache sync.Mutex
 	currentMember    atomic.Value
+	commiteeLen      int
 }
 
 const CommitteeCacheSize = 10
@@ -77,6 +78,13 @@ func SetCommitteeConfig(db cphdb.Database, keyblockchain KeyBlockChainInterface,
 
 	m_config.cacheCommittee = make(map[uint64]*committeeCache)
 	m_config.currentMember.Store(&currentMemberInfo{kNumber: 1<<63 - 1, mIndex: -1})
+	if keyblockchain != nil {
+		c := keyblockchain.CurrentCommittee()
+		if c != nil {
+			m_config.commiteeLen = len(c)
+		}
+	}
+	log.Info("SetCommitteeConfig", "len", m_config.commiteeLen)
 }
 
 func SetServerInfo(address, pubKey string) {
@@ -84,6 +92,9 @@ func SetServerInfo(address, pubKey string) {
 	m_config.serverInfo.pubKey = pubKey
 }
 
+func GetServerCommitteeLen() int {
+	return m_config.commiteeLen
+}
 func GetServerInfo(infoType ServerInfoType) string {
 	s := m_config.serverInfo
 	switch infoType {

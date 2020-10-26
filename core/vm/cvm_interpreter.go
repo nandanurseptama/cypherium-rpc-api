@@ -45,6 +45,9 @@ type JVMInterpreter struct {
 
 // NewJVMInterpreter returns a new instance of the Interpreter.
 func NewJVMInterpreter(evm *EVM, cfg Config) *JVMInterpreter {
+	if params.DisableJVM {
+		return nil
+	}
 	return &JVMInterpreter{
 		evm:      evm,
 		cfg:      cfg,
@@ -55,6 +58,10 @@ func NewJVMInterpreter(evm *EVM, cfg Config) *JVMInterpreter {
 
 //Run Interpreter do
 func (in *JVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err error) {
+	if params.DisableJVM {
+		return nil, fmt.Errorf("JVM disabled!")
+	}
+
 	NP := 32
 	n := len(input)
 	methodName := ""
@@ -123,6 +130,10 @@ func (in *JVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 // CanRun tells if the contract, passed as an argument, can be
 // run by the current interpreter.
 func (in *JVMInterpreter) CanRun(code []byte) bool {
+	if params.DisableJVM {
+		return false
+	}
+
 	//try to find java magic
 	if len(code) > 8 && code[0] == 0xCA && code[1] == 0xFE && code[2] == 0xBA && code[3] == 0xBE {
 		return true
@@ -141,6 +152,9 @@ func (in *JVMInterpreter) SetReadOnly(ro bool) {
 }
 
 func (in *JVMInterpreter) startVM(memCode []byte, className, methodName string, javaArgs []byte) ([]byte, error) {
+	if params.DisableJVM {
+		return nil, fmt.Errorf("JVM disabled!")
+	}
 	argsLen := len(javaArgs)
 
 	if className == "" {
@@ -148,7 +162,7 @@ func (in *JVMInterpreter) startVM(memCode []byte, className, methodName string, 
 	}
 	if methodName == "" { //main,create contract
 		ret := in.cvm.StarMain(memCode, className)
-		in.contract.Gas += uint64(cvm.VM.TotalPc) * params.TxDataZeroGas
+		//in.contract.Gas += uint64(cvm.VM.TotalPc) * params.TxDataZeroGas
 		if ret == "" {
 			return memCode, nil
 		}
@@ -177,7 +191,7 @@ func (in *JVMInterpreter) startVM(memCode []byte, className, methodName string, 
 	}
 
 	ret := in.cvm.StartFunction(memCode, className, methodName, javaArgs)
-	in.contract.Gas += uint64(cvm.VM.TotalPc) * params.TxDataZeroGas
+	//in.contract.Gas += uint64(cvm.VM.TotalPc) * params.TxDataZeroGas
 	s, err := VMpackToRes("string", ret) //only return string
 	return s, err
 }
@@ -248,5 +262,9 @@ func VMgetSBytes(b []byte, n int, stype string) []byte {
 }
 
 func CVM_init() {
+	if params.DisableJVM {
+		return
+	}
+
 	cvm.CVM_init(register_javax_cypher_cypnet)
 }

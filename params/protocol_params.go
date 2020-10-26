@@ -97,6 +97,7 @@ const (
 	Bn256PairingBaseGas     uint64 = 100000 // Base price for an elliptic curve pairing check
 	Bn256PairingPerPointGas uint64 = 80000  // Per-point price for an elliptic curve pairing check
 	DifficultyFactor               = 10
+	TxDataGas               uint64 = 100
 )
 
 var (
@@ -104,4 +105,8 @@ var (
 	GenesisDifficulty      = big.NewInt(131072 * DifficultyFactor) // Difficulty of the Genesis block.
 	MinimumDifficulty      = big.NewInt(131072 * DifficultyFactor) // The minimum that the difficulty may ever be.
 	DurationLimit          = big.NewInt(13 * DifficultyFactor)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
+
+
+	var DisableGAS = false
+	var DisableJVM = false
 )
