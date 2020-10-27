@@ -647,7 +647,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		log.Trace("ErrInsufficientFunds", "balance", balance.Uint64(), "cost", amount.Uint64())
 		return ErrInsufficientFunds
 	}
-	if !canTransferLock(pool.currentState, from, balance, amount) {
+	if isTransferLocked(pool.currentState, from, balance, amount) {
 		log.Trace("ErrLockedFunds", "balance", balance.Uint64(), "cost", amount.Uint64())
 		return ErrLockedFunds
 	}

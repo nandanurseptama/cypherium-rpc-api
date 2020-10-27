@@ -126,6 +126,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.TxPoolEnabledTPSFlag,
 			utils.TxPoolDisabledGASFlag,
 			utils.TxPoolDisabledJVMFlag,
+			utils.TxPoolDisabledEVMFlag,
 			utils.PowRangeModeFlag,
 		},
 	},

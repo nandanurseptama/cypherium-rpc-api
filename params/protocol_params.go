@@ -108,4 +108,5 @@ var (
 
 	DisableGAS = false
 	DisableJVM = false
+	DisableEVM = false
 )

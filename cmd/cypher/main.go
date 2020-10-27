@@ -254,7 +254,7 @@ func cypher(ctx *cli.Context) error {
 	//syscall.Dup2(int(logFile.Fd()), 1)
 	//syscall.Dup2(int(logFile.Fd()), 2)
 	//fmt.Println(logFile, syscall.Getuid())
-	log.Info("DisableJVM", params.DisableJVM)
+	log.Info("FLAG", "DisableJVM", params.DisableJVM, "DisableEVM", params.DisableEVM)
 
 	node := makeFullNode(ctx)
 	startNode(ctx, node)

@@ -275,6 +275,10 @@ var (
 		Name:  "nojvm",
 		Usage: "disable jvm",
 	}
+	TxPoolDisabledJVMFlag = cli.BoolFlag{
+		Name:  "noevm",
+		Usage: "disable evm",
+	}
 	IpEncryptDisableFlag = cli.IntFlag{
 		Name:  "ipencdis",
 		Usage: "Ip encrypt Disable",
@@ -976,8 +980,9 @@ func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	}
 	if ctx.GlobalIsSet(TxPoolDisabledJVMFlag.Name) {
 		params.DisableJVM = ctx.GlobalBool(TxPoolDisabledJVMFlag.Name)
-		log.Info("TxPoolDisabledJVMFlag", params.DisableJVM)
-
+	}
+	if ctx.GlobalIsSet(TxPoolDisabledEVMFlag.Name) {
+		params.DisableEVM = ctx.GlobalBool(TxPoolDisabledEVMFlag.Name)
 	}
 }
 

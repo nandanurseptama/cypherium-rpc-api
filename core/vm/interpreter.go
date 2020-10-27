@@ -86,6 +86,9 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	if !cfg.JumpTable[STOP].valid {
 		cfg.JumpTable = frontierInstructionSet
 	}
+	if params.DisableEVM {
+		return nil
+	}
 
 	return &EVMInterpreter{
 		evm:      evm,
