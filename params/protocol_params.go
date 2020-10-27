@@ -106,7 +106,6 @@ var (
 	MinimumDifficulty      = big.NewInt(131072 * DifficultyFactor) // The minimum that the difficulty may ever be.
 	DurationLimit          = big.NewInt(13 * DifficultyFactor)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 
-
-	var DisableGAS = false
-	var DisableJVM = false
+	DisableGAS = false
+	DisableJVM = false
 )

@@ -38,8 +38,9 @@ import (
 	"github.com/cypherium/cypherBFT/log"
 	"github.com/cypherium/cypherBFT/metrics"
 	"github.com/cypherium/cypherBFT/node"
+	"github.com/cypherium/cypherBFT/params"
 
-	"gopkg.in/urfave/cli.v1"
+	cli "gopkg.in/urfave/cli.v1"
 )
 
 const (
@@ -233,7 +234,6 @@ func init() {
 }
 
 func main() {
-	vm.CVM_init()
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -254,10 +254,12 @@ func cypher(ctx *cli.Context) error {
 	//syscall.Dup2(int(logFile.Fd()), 1)
 	//syscall.Dup2(int(logFile.Fd()), 2)
 	//fmt.Println(logFile, syscall.Getuid())
+	log.Info("DisableJVM", params.DisableJVM)
 
-	vm.CVM_init()
 	node := makeFullNode(ctx)
 	startNode(ctx, node)
+	vm.CVM_init()
+
 	node.Wait()
 	return nil
 }

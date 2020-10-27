@@ -50,7 +50,7 @@ import (
 	"github.com/cypherium/cypherBFT/p2p/nat"
 	"github.com/cypherium/cypherBFT/p2p/netutil"
 	"github.com/cypherium/cypherBFT/params"
-	"gopkg.in/urfave/cli.v1"
+	cli "gopkg.in/urfave/cli.v1"
 )
 
 var (
@@ -976,6 +976,8 @@ func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	}
 	if ctx.GlobalIsSet(TxPoolDisabledJVMFlag.Name) {
 		params.DisableJVM = ctx.GlobalBool(TxPoolDisabledJVMFlag.Name)
+		log.Info("TxPoolDisabledJVMFlag", params.DisableJVM)
+
 	}
 }
 

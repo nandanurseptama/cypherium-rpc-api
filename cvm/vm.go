@@ -80,7 +80,7 @@ func NewVM() *CVM {
 }
 
 // Before vm initialization, all lot of system settings can be set.
-func (this *CVM) Init() {
+func (this *CVM) InitMe() {
 	natives := make(map[string]reflect.Value)
 
 	threadsLogLevel, _ := strconv.Atoi(this.GetSystemSetting("log.level.threads"))
@@ -315,7 +315,7 @@ func CVM_init(registerNative func()) {
 	if VM.Classloader != NULL {
 		return
 	}
-	VM.Init()
+	VM.InitMe()
 	if registerNative != nil {
 		registerNative()
 		m_last_registerNative = registerNative

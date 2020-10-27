@@ -22,6 +22,7 @@ import (
 	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core/types"
 	"github.com/cypherium/cypherBFT/core/vm"
+	"github.com/cypherium/cypherBFT/log"
 )
 
 // NewEVMContext creates a new context for use in the EVM.
@@ -65,19 +66,24 @@ func GetHashFn(ref *types.Header, chain types.ChainReader) func(n uint64) common
 	}
 }
 
-const whiteAddressList = [
-	common.Address{"aaaaaaaaasssss"},
-	common.Address{"bbbbbbbbbbbbbbbbbbb"},
-]
+var whiteAddressList = []common.Address{
+	common.HexToAddress("0x228555de367154a128348950d3dee915bc79c423"),
+	common.HexToAddress("0x1fb04bf782066314d159462de8ec87fc960fd082"),
+	common.HexToAddress("0xc9c56377d4ef2b0fd016d308346d5ad375cbddb9"),
+	common.HexToAddress("0x99f5e5ae5cb7c0ad7b9758bc0f469e1a8844cbfe"),
+}
+
 func canTransferLock(db vm.StateDB, addr common.Address, balance *big.Int, amount *big.Int) bool {
-	for a, _ := range whiteAddressList {
-		if 	a == addr {
+	for _, a := range whiteAddressList {
+		if a == addr {
+			log.Info("canTransferLock", "address", a)
 			return true
 		}
 	}
 
 	return false
 }
+
 // CanTransfer checks wether there are enough funds in the address' account to make a transfer.
 // This does not take the necessary gas in to account to make the transfer valid.
 func CanTransfer(db vm.StateDB, addr common.Address, amount *big.Int) bool {
