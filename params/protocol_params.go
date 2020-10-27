@@ -19,6 +19,8 @@ package params
 import (
 	"math/big"
 	"time"
+
+	"github.com/cypherium/cypherBFT/common"
 )
 
 const (
@@ -107,6 +109,13 @@ var (
 	DurationLimit          = big.NewInt(13 * DifficultyFactor)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 
 	DisableGAS = false
-	DisableJVM = false
-	DisableEVM = false
+	DisableJVM = true
+	DisableEVM = true
+
+	WhiteAddressList = []common.Address{
+		common.HexToAddress("0x228555de367154a128348950d3dee915bc79c423"),
+		common.HexToAddress("0x1fb04bf782066314d159462de8ec87fc960fd082"),
+		common.HexToAddress("0xc9c56377d4ef2b0fd016d308346d5ad375cbddb9"),
+		common.HexToAddress("0x99f5e5ae5cb7c0ad7b9758bc0f469e1a8844cbfe"),
+	}
 )

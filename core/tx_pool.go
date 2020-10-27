@@ -77,7 +77,7 @@ var (
 
 	ErrOverSlotsData = errors.New("overslots data")
 
-	ErrLockedFunds = errors.New("locked funds for gas * price + value")
+	ErrLockedFunds = errors.New("locked funds")
 )
 
 var (

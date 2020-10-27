@@ -22,6 +22,8 @@ import (
 	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core/types"
 	"github.com/cypherium/cypherBFT/core/vm"
+	"github.com/cypherium/cypherBFT/log"
+	"github.com/cypherium/cypherBFT/params"
 )
 
 // NewEVMContext creates a new context for use in the EVM.
@@ -65,17 +67,10 @@ func GetHashFn(ref *types.Header, chain types.ChainReader) func(n uint64) common
 	}
 }
 
-var whiteAddressList = []common.Address{
-	common.HexToAddress("0x228555de367154a128348950d3dee915bc79c423"),
-	common.HexToAddress("0x1fb04bf782066314d159462de8ec87fc960fd082"),
-	common.HexToAddress("0xc9c56377d4ef2b0fd016d308346d5ad375cbddb9"),
-	common.HexToAddress("0x99f5e5ae5cb7c0ad7b9758bc0f469e1a8844cbfe"),
-}
-
 func isTransferLocked(db vm.StateDB, addr common.Address, balance *big.Int, amount *big.Int) bool {
-	for _, a := range whiteAddressList {
+	for _, a := range params.WhiteAddressList {
 		if a == addr {
-			//log.Info("isTransferLocked", "address", a)
+			log.Info("isTransferLocked", "address", a)
 			return false
 		}
 	}

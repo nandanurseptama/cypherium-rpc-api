@@ -271,13 +271,13 @@ var (
 		Name:  "nogas",
 		Usage: "disable gas",
 	}
-	TxPoolDisabledJVMFlag = cli.BoolFlag{
-		Name:  "nojvm",
-		Usage: "disable jvm",
+	TxPoolEnabledJVMFlag = cli.BoolFlag{
+		Name:  "jvm",
+		Usage: "enable jvm",
 	}
-	TxPoolDisabledJVMFlag = cli.BoolFlag{
-		Name:  "noevm",
-		Usage: "disable evm",
+	TxPoolEnabledEVMFlag = cli.BoolFlag{
+		Name:  "evm",
+		Usage: "enable evm",
 	}
 	IpEncryptDisableFlag = cli.IntFlag{
 		Name:  "ipencdis",
@@ -978,11 +978,11 @@ func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	if ctx.GlobalIsSet(TxPoolDisabledGASFlag.Name) {
 		params.DisableGAS = ctx.GlobalBool(TxPoolDisabledGASFlag.Name)
 	}
-	if ctx.GlobalIsSet(TxPoolDisabledJVMFlag.Name) {
-		params.DisableJVM = ctx.GlobalBool(TxPoolDisabledJVMFlag.Name)
+	if ctx.GlobalIsSet(TxPoolEnabledJVMFlag.Name) {
+		params.DisableJVM = !ctx.GlobalBool(TxPoolEnabledJVMFlag.Name)
 	}
-	if ctx.GlobalIsSet(TxPoolDisabledEVMFlag.Name) {
-		params.DisableEVM = ctx.GlobalBool(TxPoolDisabledEVMFlag.Name)
+	if ctx.GlobalIsSet(TxPoolEnabledEVMFlag.Name) {
+		params.DisableEVM = !ctx.GlobalBool(TxPoolEnabledEVMFlag.Name)
 	}
 }
 
