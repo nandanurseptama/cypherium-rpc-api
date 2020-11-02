@@ -29,7 +29,6 @@ import (
 	"github.com/cypherium/cypherBFT/accounts"
 	"github.com/cypherium/cypherBFT/cphdb"
 	"github.com/cypherium/cypherBFT/event"
-	"github.com/cypherium/cypherBFT/internal/debug"
 	"github.com/cypherium/cypherBFT/log"
 	"github.com/cypherium/cypherBFT/p2p"
 	"github.com/cypherium/cypherBFT/rpc"
@@ -590,7 +589,8 @@ func (n *Node) apis() []rpc.API {
 			Version:   "1.0",
 			Service:   NewPublicAdminAPI(n),
 			Public:    true,
-		}, {
+		},
+		/*		 {
 			Namespace: "debug",
 			Version:   "1.0",
 			Service:   debug.Handler,
@@ -599,7 +599,9 @@ func (n *Node) apis() []rpc.API {
 			Version:   "1.0",
 			Service:   NewPublicDebugAPI(n),
 			Public:    true,
-		}, {
+		},
+		*/
+		{
 			Namespace: "web3",
 			Version:   "1.0",
 			Service:   NewPublicWeb3API(n),
