@@ -180,9 +180,13 @@ func (txS *txService) packageTxs(blockType uint8) *types.Block {
 }
 
 func packageHeader(keyHash common.Hash, parent *types.Block, state *state.StateDB, blockType uint8) *types.Header {
+	now := time.Now()
 	log.Info("packageHeader", "parent number=", parent.NumberU64())
 
-	tstamp := time.Now().UnixNano()
+	d, _ := time.ParseDuration("-24h")
+	now = now.Add(2 * d)
+
+	tstamp := now.UnixNano()
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
 		tstamp = parent.Time().Int64() + 1
 	}
