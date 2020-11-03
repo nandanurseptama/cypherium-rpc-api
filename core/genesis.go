@@ -45,7 +45,7 @@ var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 type Genesis struct {
 	Config    *params.ChainConfig `json:"config"`
 	Timestamp uint64              `json:"timestamp"`
-	ExtraData []byte              `json:"extraData"`
+	ExtraData string              `json:"extraData"`
 	GasLimit  uint64              `json:"gasLimit"   gencodec:"required"`
 	Alloc     GenesisAlloc        `json:"alloc"      gencodec:"required"`
 
@@ -84,7 +84,7 @@ type GenesisAccount struct {
 // field type overrides for gencodec
 type genesisSpecMarshaling struct {
 	Timestamp math.HexOrDecimal64
-	ExtraData hexutil.Bytes
+	ExtraData string
 	GasLimit  math.HexOrDecimal64
 	GasUsed   math.HexOrDecimal64
 	Number    math.HexOrDecimal64
@@ -232,7 +232,7 @@ func (g *Genesis) ToBlock(db cphdb.Database) *types.Block {
 		Number:     new(big.Int).SetUint64(g.Number),
 		Time:       new(big.Int).SetUint64(g.Timestamp),
 		ParentHash: g.ParentHash,
-		Extra:      g.ExtraData,
+		Extra:      []byte(g.ExtraData),
 		GasLimit:   g.GasLimit,
 		GasUsed:    g.GasUsed,
 		Root:       root,
