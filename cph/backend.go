@@ -323,6 +323,11 @@ func (s *Cypherium) APIs() []rpc.API {
 			Service:   NewPrivateMinerAPI(s),
 			Public:    false,
 		}, {
+			Namespace: "reconfig",
+			Version:   "1.0",
+			Service:   NewPrivateReconfigAPI(s),
+			Public:    false,
+		}, {
 			Namespace: "cph",
 			Version:   "1.0",
 			Service:   filters.NewPublicFilterAPI(s.APIBackend, false),
@@ -331,19 +336,16 @@ func (s *Cypherium) APIs() []rpc.API {
 			Namespace: "admin",
 			Version:   "1.0",
 			Service:   NewPrivateAdminAPI(s),
-		},
-		/*		{
-					Namespace: "debug",
-					Version:   "1.0",
-					Service:   NewPublicDebugAPI(s),
-					Public:    true,
-				}, {
-					Namespace: "debug",
-					Version:   "1.0",
-					Service:   NewPrivateDebugAPI(s.chainConfig, s),
-				},
-		*/
-		{
+		}, {
+			Namespace: "debug",
+			Version:   "1.0",
+			Service:   NewPublicDebugAPI(s),
+			Public:    true,
+		}, {
+			Namespace: "debug",
+			Version:   "1.0",
+			Service:   NewPrivateDebugAPI(s.chainConfig, s),
+		}, {
 			Namespace: "net",
 			Version:   "1.0",
 			Service:   s.netRPCService,
