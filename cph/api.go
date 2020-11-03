@@ -268,7 +268,6 @@ func (api *PublicCphereumAPI) Status() string {
 	}
 	return s
 }
-
 // PrivateAdminAPI is the collection of Cypherium full node-related APIs
 // exposed over the private admin endpoint.
 type PrivateAdminAPI struct {
