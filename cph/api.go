@@ -225,6 +225,44 @@ func (api *PrivateMinerAPI) Status() string {
 	return s
 }
 
+// PrivateReconfigAPI
+type PrivateReconfigAPI struct {
+	e *Cypherium
+}
+
+// NewPrivateMinerAPI
+func NewPrivateReconfigAPI(e *Cypherium) *PrivateReconfigAPI {
+	return &PrivateReconfigAPI{e: e}
+}
+
+// Start .
+func (api *PrivateReconfigAPI) Start(threads *int, addr common.Address) error {
+	log.Info("PrivateReconfigAPI start")
+	return nil
+}
+
+func (api *PublicCphereumAPI) Status() string {
+	var s string
+	i := bftview.IamMember()
+
+	if i >= 0 {
+		if i == 0 {
+			s = "I'm leader."
+		} else {
+			s = "I'm committee member."
+		}
+	} else {
+		s += "I'm common node."
+
+	}
+	running := api.e.IsMining() || api.e.reconfigIsRunning()
+	if running {
+		s += "is Running."
+	} else {
+		s += "Stopped."
+	}
+	return s
+}
 // PrivateAdminAPI is the collection of Cypherium full node-related APIs
 // exposed over the private admin endpoint.
 type PrivateAdminAPI struct {
