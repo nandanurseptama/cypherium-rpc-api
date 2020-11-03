@@ -48,7 +48,7 @@ type GenesisKey struct {
 	ParentHash common.Hash         `json:"parentHash"`
 	Nonce      uint64              `json:"nonce"`
 	Time       uint64              `json:"timestamp"`
-	ExtraData  []byte              `json:"extraData"`
+	ExtraData  string              `json:"extraData"`
 	Number     uint64              `json:"number"`
 	Difficulty *big.Int            `json:"difficulty" 			gencodec:"required"`
 	MixHash    common.Hash         `json:"mixHash"`
@@ -93,7 +93,7 @@ type keyGenesisSpecMarshaling struct {
 	ParentHash    common.Hash
 	Nonce         math.HexOrDecimal64
 	Time          math.HexOrDecimal64
-	ExtraData     hexutil.Bytes
+	ExtraData     string
 	Number        math.HexOrDecimal64
 	Difficulty    *math.HexOrDecimal256
 	Alloc         map[common.UnprefixedAddress]GenesisKeyAccount
@@ -220,7 +220,7 @@ func (g *GenesisKey) ToBlock(db cphdb.Database) *types.KeyBlock {
 		Number:     new(big.Int).SetUint64(g.Number),
 		Nonce:      types.EncodeNonce(g.Nonce),
 		Time:       new(big.Int).SetUint64(g.Time),
-		Extra:      g.ExtraData,
+		Extra:      []byte(g.ExtraData),
 		Difficulty: g.Difficulty,
 		MixDigest:  g.MixHash,
 		BlockType:  types.Initialization,

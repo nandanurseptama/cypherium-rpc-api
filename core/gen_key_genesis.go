@@ -22,7 +22,7 @@ func (g GenesisKey) MarshalJSON() ([]byte, error) {
 		ParentHash    common.Hash                                    `json:"parentHash"`
 		Nonce         math.HexOrDecimal64                            `json:"nonce"`
 		Time          math.HexOrDecimal64                            `json:"timestamp"`
-		ExtraData     hexutil.Bytes                                  `json:"extraData"`
+		ExtraData     string                                         `json:"extraData"`
 		Number        math.HexOrDecimal64                            `json:"number"`
 		Difficulty    *math.HexOrDecimal256                          `json:"difficulty" 			gencodec:"required"`
 		MixHash       common.Hash                                    `json:"mixHash"`
@@ -71,7 +71,7 @@ func (g *GenesisKey) UnmarshalJSON(input []byte) error {
 		ParentHash    *common.Hash                                   `json:"parentHash"`
 		Nonce         *math.HexOrDecimal64                           `json:"nonce"`
 		Time          *math.HexOrDecimal64                           `json:"timestamp"`
-		ExtraData     *hexutil.Bytes                                 `json:"extraData"`
+		ExtraData     *string                                        `json:"extraData"`
 		Number        *math.HexOrDecimal64                           `json:"number"`
 		Difficulty    *math.HexOrDecimal256                          `json:"difficulty" 			gencodec:"required"`
 		MixHash       *common.Hash                                   `json:"mixHash"`
