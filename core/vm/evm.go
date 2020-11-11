@@ -24,7 +24,6 @@ import (
 	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core/types"
 	"github.com/cypherium/cypherBFT/crypto"
-	"github.com/cypherium/cypherBFT/log"
 	"github.com/cypherium/cypherBFT/params"
 )
 
@@ -151,7 +150,7 @@ func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmCon
 		interpreters: make([]Interpreter, 2),
 	}
 	if params.DisableEVM {
-		log.Info("NewEVM", "DisableEVM", params.DisableEVM)
+		//log.Info("NewEVM", "DisableEVM", params.DisableEVM)
 	}
 
 	evm.interpreters[0] = NewJVMInterpreter(evm, vmConfig)
