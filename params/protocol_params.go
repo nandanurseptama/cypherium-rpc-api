@@ -28,8 +28,8 @@ const (
 	GapTxBlocks          = KeyblockPerTxBlocks + 2
 	MaxTxCountPerBlock   = 1024
 	PaceMakerTimeout     = 2 * time.Minute
-	PaceMakerHeatTimeout = 30 * time.Second
-	SendErrReTryTime     = 2 * time.Minute
+	PaceMakerHeatTimeout = 2 * time.Second
+	SendErrReTryTime     = 30 * time.Second
 
 	MaxGoRoutines = 200
 	MaxSendBlocks = 6

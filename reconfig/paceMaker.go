@@ -85,19 +85,25 @@ func (t *paceMakerTimer) get() (time.Time, bool, bool, int) {
 }
 
 func (t *paceMakerTimer) loopTimer() {
+	lastHeartBeatTm := time.Now()
 	for {
 		time.Sleep(50 * time.Millisecond)
 		startTime, beStop, beClose, retryNumber := t.get()
 		if beClose {
 			return
 		}
+
+		diff := time.Now().Sub(lastHeartBeatTm)
+		if diff > params.PaceMakerHeatTimeout {
+			t.service.sendHeartBeatMsg()
+			lastHeartBeatTm = time.Now()
+		}
+
 		if beStop {
 			continue
 		}
-		diff := time.Now().Sub(startTime)
-		if diff > params.PaceMakerHeatTimeout {
-			t.service.sendHeartBeatMsg()
-		}
+
+		diff = time.Now().Sub(startTime)
 		if diff > t.waitTime /**time.Duration(retryNumber+1)*/ && bftview.IamMember() >= 0 { //timeout
 			log.Warn("Viewchange Event is coming", "retryNumber", retryNumber)
 			switchLen := bftview.GetServerCommitteeLen()/2 + 1
@@ -155,7 +161,7 @@ func (t *paceMakerTimer) procBlockDone(curBlock *types.Block, curKeyBlock *types
 			}
 		}
 
-		if curBlock.NumberU64()%10 == 0 {
+		if curBlock.NumberU64()%20 == 0 {
 			//log.Info("Goroutine", "num", runtime.NumGoroutine())
 			runtime.GC() //force gc
 		}
