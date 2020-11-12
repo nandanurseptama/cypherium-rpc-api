@@ -159,7 +159,6 @@ func (st *StateTransition) buyGas() error {
 	if params.DisableGAS {
 		return nil
 	}
-
 	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
 	if st.state.GetBalance(st.msg.From()).Cmp(mgval) < 0 {
 		return errInsufficientBalanceForGas

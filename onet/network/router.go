@@ -172,6 +172,7 @@ func (r *Router) Send(e *ServerIdentity, msg Message, bForeConnect bool) (uint64
 	blocksLen := r.sendsMap[e.ID]
 	if blocksLen > params.MaxSendBlocks { //max queue is 20
 		r.sendMu.Unlock()
+		log.Info("Router.Send", "busy address", e.Address.String())
 		return 0, errors.New("the address:" + e.Address.String() + " maybe busy or not online!")
 	}
 	r.sendsMap[e.ID]++

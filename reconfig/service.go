@@ -231,7 +231,7 @@ func (s *Service) CheckView(data []byte) error {
 	view := bftview.DecodeToView(data)
 	knumber := s.kbc.CurrentBlock().NumberU64()
 	txnumber := s.bc.CurrentBlock().NumberU64()
-	log.Info("CheckView..", "txNumber", view.TxNumber, "keyNumber", view.KeyNumber, "local key number", knumber, "tx number", txnumber)
+	log.Debug("CheckView..", "txNumber", view.TxNumber, "keyNumber", view.KeyNumber, "local key number", knumber, "tx number", txnumber)
 	if view.KeyNumber < knumber {
 		return hotstuff.ErrOldState
 	} else if view.KeyNumber > knumber {
@@ -248,7 +248,7 @@ func (s *Service) CheckView(data []byte) error {
 
 //OnPropose call by hotstuff
 func (s *Service) OnPropose(kState []byte, tState []byte, extra []byte) error { //verify new block
-	log.Info("OnPropose..")
+	log.Debug("OnPropose..")
 	if !s.isRunning() {
 		return types.ErrNotRunning
 	}
@@ -284,7 +284,7 @@ func (s *Service) OnPropose(kState []byte, tState []byte, extra []byte) error { 
 
 //Propose call by hotstuff
 func (s *Service) Propose() (e error, kState []byte, tState []byte, extra []byte) { //buf recv by onpropose, onviewdown
-	log.Info("Propose..")
+	log.Debug("Propose..")
 
 	proposeOK := false
 	defer func() {
@@ -412,7 +412,7 @@ func (s *Service) Write(id string, data *hotstuff.HotstuffMessage) error {
 
 //Broadcast call by hotstuff
 func (s *Service) Broadcast(data *hotstuff.HotstuffMessage) []error {
-	log.Info("Broadcast", "code", hotstuff.ReadableMsgType(data.Code), "ViewId", data.ViewId)
+	log.Debug("Broadcast", "code", hotstuff.ReadableMsgType(data.Code), "ViewId", data.ViewId)
 	//var arr []error
 	mb := bftview.GetCurrentMember()
 	if mb == nil {
@@ -477,6 +477,7 @@ func (s *Service) sendHeartBeatMsg() {
 					continue
 				}
 			}
+			log.Debug("sendHeartBeatMsg", "tm", time.Now())
 			s.goPool.AddFunc(s.SendRaw1, network.NodeToSid(node.Address, node.Public), &networkMsgAck{ID: 0}, false)
 			//go s.SendRaw(network.NodeToSid(node.Address, node.Public), &networkMsgAck{ID: 0}, false)
 		}
@@ -491,7 +492,7 @@ func (s *Service) handleNetworkMsgAckReq(env *network.Envelope) {
 	}
 	si := env.ServerIdentity
 	address := si.Address.String()
-	//	log.Info("handleNetworkMsgAckReq Recv", "ID", msg.ID, "from address", address )
+	log.Debug("handleNetworkMsgAckReq Recv", "from address", address)
 	s.muNetLastMsg.Lock()
 	r := s.netLastMsg[address]
 	if r != nil {
@@ -510,13 +511,13 @@ func (s *Service) handleHotStuffMsg() {
 		msg := data.(*hotstuffMsg)
 		msgCode := msg.hMsg.Code
 		if msgCode != hotstuff.MsgCollectTimeoutView {
-			log.Info("handleHotStuffMsg", "id", msg.hMsg.Id, "code", hotstuff.ReadableMsgType(msgCode), "ViewId", msg.hMsg.ViewId)
+			log.Debug("handleHotStuffMsg", "id", msg.hMsg.Id, "code", hotstuff.ReadableMsgType(msgCode), "ViewId", msg.hMsg.ViewId)
 		}
 		var curN uint64
 		if msgCode == hotstuff.MsgTryPropose || msgCode == hotstuff.MsgStartNewView {
 			curN = s.bc.CurrentBlock().NumberU64()
 			if msg.lastN < curN {
-				log.Info("handleHotStuffMsg", "code", hotstuff.ReadableMsgType(msgCode), "lastN", msg.lastN, "curN", curN)
+				log.Debug("handleHotStuffMsg", "code", hotstuff.ReadableMsgType(msgCode), "lastN", msg.lastN, "curN", curN)
 				continue
 			}
 		} else if msgCode == hotstuff.MsgPrepare {
@@ -524,7 +525,7 @@ func (s *Service) handleHotStuffMsg() {
 			keyNumber := curBlock.NumberU64()
 			keyHash := curBlock.Hash()
 			if bftview.LoadMember(keyNumber, keyHash, true) == nil && msg.sid.Address.String() != s.serverAddress {
-				log.Info("request committee", "keynumber", keyNumber, "send to address", msg.sid.Address)
+				log.Debug("request committee", "keynumber", keyNumber, "send to address", msg.sid.Address)
 				s.goPool.AddFunc(s.SendRawData1, msg.sid, &networkMsg{Cmsg: &committeeInfo{Committee: nil, KeyHash: keyHash, KeyNumber: keyNumber}}, true)
 				//go s.SendRawData(msg.sid, &networkMsg{Cmsg: &committeeInfo{Committee: nil, KeyHash: keyHash, KeyNumber: keyNumber}}, true)
 			}
@@ -558,7 +559,7 @@ func (s *Service) syncCommittee(mb *bftview.Committee, keyblock *types.KeyBlock)
 		if r.Address == s.serverAddress {
 			continue
 		}
-		log.Info("syncBestCandidate", "send to", r.Address)
+		log.Debug("syncBestCandidate", "send to", r.Address)
 		s.goPool.AddFunc(s.SendRawData1, network.NodeToSid(r.Address, r.Public), &networkMsg{Bmsg: msg}, true)
 		//go s.SendRawData(network.NodeToSid(r.Address, r.Public), &networkMsg{Bmsg: msg}, true)
 	}
@@ -626,10 +627,10 @@ func (s *Service) handleCommitteeMsg() {
 				if mb == nil {
 					continue
 				}
-				log.Info("committeeInfo answer", "number", cInfo.KeyNumber, "adddress", msg.sid.Address)
+				log.Debug("committeeInfo answer", "number", cInfo.KeyNumber, "adddress", msg.sid.Address)
 				r, _ := mb.Get(msg.sid.Address.String(), bftview.Address)
 				if r != nil {
-					log.Info("committeeInfo answer..ok", "number", cInfo.KeyNumber)
+					log.Debug("committeeInfo answer..ok", "number", cInfo.KeyNumber)
 					s.goPool.AddFunc(s.SendRawData1, msg.sid, &networkMsg{Cmsg: &committeeInfo{Committee: mb, KeyHash: cInfo.KeyHash, KeyNumber: cInfo.KeyNumber}}, true)
 					//go s.SendRawData(msg.sid, &networkMsg{Cmsg: &committeeInfo{Committee: mb, KeyHash: cInfo.KeyHash, KeyNumber: cInfo.KeyNumber}}, true)
 				}
@@ -639,7 +640,7 @@ func (s *Service) handleCommitteeMsg() {
 			if bftview.LoadMember(cInfo.KeyNumber, cInfo.KeyHash, true) != nil {
 				continue
 			}
-			log.Info("committeeInfo", "number", cInfo.KeyNumber, "adddress", msg.sid.Address)
+			log.Debug("committeeInfo", "number", cInfo.KeyNumber, "adddress", msg.sid.Address)
 			keyblock := s.kbc.GetBlock(cInfo.KeyHash, cInfo.KeyNumber)
 			if keyblock != nil {
 				if cInfo.Committee.RlpHash() == keyblock.CommitteeHash() {
@@ -699,7 +700,7 @@ func (s *Service) updateCommittee(keyBlock *types.KeyBlock) bool {
 }
 
 func (s *Service) Committee_OnStored(keyblock *types.KeyBlock, mb *bftview.Committee) {
-	log.Info("store committee", "keyNumber", keyblock.NumberU64(), "ip0", mb.List[0].Address, "ipn", mb.List[len(mb.List)-1].Address)
+	log.Debug("store committee", "keyNumber", keyblock.NumberU64(), "ip0", mb.List[0].Address, "ipn", mb.List[len(mb.List)-1].Address)
 	//if keyblock.HasNewNode() && keyblock.NumberU64() == s.kbc.CurrentBlock().NumberU64() {
 	//	s.server.AdjustConnect( mb.List )
 	//}
@@ -710,7 +711,7 @@ func (s *Service) Committee_Request(kNumber uint64, hash common.Hash) {
 		return
 	}
 
-	log.Info("Committee_Request", "keynumber", kNumber)
+	log.Debug("Committee_Request", "keynumber", kNumber)
 
 	var parentMb *bftview.Committee
 	for i := 1; i < 10; i++ {
@@ -821,6 +822,7 @@ func (s *Service) SendRawData1(ps ...interface{}) {
 	id := si.Address.String()
 	msg := ps[1].(*networkMsg)
 	//shouldReSend := ps[2].(bool)
+	log.Debug("SendRawData1", "address", id)
 
 	s.muNetErr.Lock()
 	tm, ok := s.netErrMap[id]
@@ -828,6 +830,7 @@ func (s *Service) SendRawData1(ps ...interface{}) {
 
 	if ok {
 		if time.Now().Sub(tm) < params.SendErrReTryTime {
+			log.Debug("SendRawData1 SendErrReTryTime err", "address", id)
 			return
 		}
 		s.muNetErr.Lock()
