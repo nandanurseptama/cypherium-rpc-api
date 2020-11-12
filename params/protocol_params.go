@@ -28,11 +28,11 @@ const (
 	GapTxBlocks          = KeyblockPerTxBlocks + 2
 	MaxTxCountPerBlock   = 1024
 	PaceMakerTimeout     = 2 * time.Minute
-	PaceMakerHeatTimeout = 30 * time.Second
-	SendErrReTryTime     = 2 * time.Minute
+	PaceMakerHeatTimeout = 20 * time.Second
+	SendErrReTryTime     = 60 * time.Second
 
-	MaxGoRoutines = 200
-	MaxSendBlocks = 6
+	MaxGoRoutines = 400
+	MaxSendBlocks = 10
 
 	KeyBlock_Reward = 1e+18 // Block reward in wei for successfully mining a block
 	TxBlock_Reward  = 2e+17 // Block reward in wei for successfully mining a block
@@ -117,5 +117,6 @@ var (
 		common.HexToAddress("0x1fb04bf782066314d159462de8ec87fc960fd082"),
 		common.HexToAddress("0xc9c56377d4ef2b0fd016d308346d5ad375cbddb9"),
 		common.HexToAddress("0x99f5e5ae5cb7c0ad7b9758bc0f469e1a8844cbfe"),
+		common.HexToAddress("0x216fd89ea77b220e71e439e76f4873e63b5c6c69"),
 	}
 )

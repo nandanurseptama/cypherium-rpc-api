@@ -1366,16 +1366,21 @@ func (hsm *HotstuffProtocolManager) Stop() {
 
 func (hsm *HotstuffProtocolManager) handleViewTimeout() error {
 	now := time.Now()
-	for _, v := range hsm.views {
-		duration := now.Sub(v.createdAt).Seconds()
+	if len(hsm.views) > 3 {
+		for _, v := range hsm.views {
+			duration := now.Sub(v.createdAt).Seconds()
 
-		if duration > hsm.timeout.Seconds() {
-			log.Debug("Remove timeout view", "viewId", v.hash, "phase", readablePhase(v.phaseAsReplica))
-			if v.phaseAsReplica < PhaseFinal {
-				hsm.viewDone(v, nil, nil, nil, ErrViewTimeout)
+			if duration > hsm.timeout.Seconds() {
+				log.Debug("Remove timeout view", "viewId", v.hash, "phase", readablePhase(v.phaseAsReplica))
+				if v.phaseAsReplica < PhaseFinal {
+					hsm.viewDone(v, nil, nil, nil, ErrViewTimeout)
+				}
+
+				hsm.removeView(v)
+				if len(hsm.views) == 1 {
+					break
+				}
 			}
-
-			hsm.removeView(v)
 		}
 	}
 
