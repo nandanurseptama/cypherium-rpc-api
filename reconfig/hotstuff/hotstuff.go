@@ -1366,7 +1366,7 @@ func (hsm *HotstuffProtocolManager) Stop() {
 
 func (hsm *HotstuffProtocolManager) handleViewTimeout() error {
 	now := time.Now()
-	if len(hsm.views) > 3 {
+	if len(hsm.views) > 1 {
 		for _, v := range hsm.views {
 			duration := now.Sub(v.createdAt).Seconds()
 
