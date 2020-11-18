@@ -326,15 +326,20 @@ func (s *Service) Propose() (e error, kState []byte, tState []byte, extra []byte
 	s.muCurrentView.Unlock()
 
 	if reconfigType > 0 {
-		block, keyblock, mb, bestCandi, _, err := s.keyService.tryProposalChangeCommittee(s.bc.CurrentBlock(), reconfigType, leaderIndex)
-		if err == nil && block != nil && keyblock != nil && mb != nil {
-			tbuf := block.EncodeToBytes()
+		keyblock, mb, bestCandi, _, err := s.keyService.tryProposalChangeCommittee(s.bc.CurrentBlock(), reconfigType, leaderIndex)
+		if err == nil && keyblock != nil && mb != nil {
 			kbuf := keyblock.EncodeToBytes()
 			if bestCandi != nil {
 				extra = bestCandi.EncodeToBytes()
 			}
-			proposeOK = true
-			return nil, kbuf, tbuf, extra
+
+			tbuf, err := s.txService.tryProposalNewBlock(types.IsKeyBlockType)
+			if err != nil {
+				log.Error("Propose keyblock+txblock", "error", err)
+			} else {
+				proposeOK = true
+				return nil, kbuf, tbuf, extra
+			}
 		}
 		log.Warn("tryProposalChangeCommittee error and tryProposalNewBlock", "error", err)
 		data, err := s.txService.tryProposalNewBlock(types.IsKeyBlockSkipType)
