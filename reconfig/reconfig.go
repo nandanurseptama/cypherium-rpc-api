@@ -42,6 +42,7 @@ type Backend interface {
 	TxPool() *core.TxPool
 }
 
+// Public interface of service class
 type serviceI interface {
 	updateCommittee(keyBlock *types.KeyBlock) bool
 	updateCurrentView(fromKeyBlock bool)
@@ -54,7 +55,7 @@ type serviceI interface {
 	sendHeartBeatMsg()
 }
 
-//NewReconfig call by backend
+//NewReconfig call by cph backend when initializing
 func NewReconfig(db cphdb.Database, cph Backend, config *params.ChainConfig, mux *event.TypeMux, engine pow.Engine, extIP net.IP) *Reconfig {
 	reconfig := &Reconfig{mux: mux, cph: cph, config: config, engine: engine, db: db}
 
@@ -75,6 +76,7 @@ func NewReconfig(db cphdb.Database, cph Backend, config *params.ChainConfig, mux
 	return reconfig
 }
 
+// Monitoring keyblock and newcandidate events
 func (reconf *Reconfig) update() {
 	for ev := range reconf.reconfigSub.Chan() {
 		if !reconf.service.isRunning() {
@@ -98,6 +100,7 @@ func (reconf *Reconfig) update() {
 	log.Info("quit Reconfig.update")
 }
 
+// Monitoring new txs Event
 func (reconf *Reconfig) txsEventLoop() {
 	for {
 		select {
@@ -112,7 +115,7 @@ func (reconf *Reconfig) txsEventLoop() {
 	}
 }
 
-//Start call by miner---interface for muti service----------------------------------------------------------------------------------
+//Start call by miner
 func (reconf *Reconfig) Start(config *common.NodeConfig) {
 	reconf.service.start(config)
 	log.Info("reconfig start")

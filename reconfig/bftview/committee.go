@@ -1,3 +1,4 @@
+// Package bftview implements Cypherium committee common operation functions.
 package bftview
 
 import (
@@ -110,6 +111,7 @@ func GetServerInfo(infoType ServerInfoType) string {
 	return ""
 }
 
+// load committee by keyblock number, needIP is for ignore ip address
 func LoadMember(kNumber uint64, hash common.Hash, needIP bool) *Committee {
 	m_config.muCommitteeCache.Lock()
 	c, ok := m_config.cacheCommittee[kNumber]
@@ -131,6 +133,7 @@ func LoadMember(kNumber uint64, hash common.Hash, needIP bool) *Committee {
 	return nil
 }
 
+// Store committee in cache
 func (committee *Committee) storeInCache(keyNumber uint64, hasIP bool) {
 	m_config.muCommitteeCache.Lock()
 	defer m_config.muCommitteeCache.Unlock()
@@ -189,6 +192,7 @@ func IamLeader(leaderIndex uint) bool {
 	return false
 }
 
+// return the member's index in current committee
 func IamMember() int {
 	myPubKey := GetServerInfo(PublicKey)
 	if myPubKey == "" {
@@ -283,6 +287,7 @@ func (committee *Committee) Copy() *Committee {
 	return p
 }
 
+// Add member node to committee, one in and one out
 func (committee *Committee) Add(r *common.Cnode, leaderIndex int, outAddress string) *common.Cnode {
 	n := len(committee.List)
 	leader := committee.List[leaderIndex]
@@ -370,6 +375,8 @@ func (committee *Committee) Leader() *common.Cnode {
 func (committee *Committee) In() *common.Cnode {
 	return committee.List[len(committee.List)-1]
 }
+
+// Convert committee's public key to bls public key
 func (committee *Committee) ToBlsPublicKeys(kNumber uint64) []*bls.PublicKey {
 	m_config.muCommitteeCache.Lock()
 	c, ok := m_config.cacheCommittee[kNumber]
