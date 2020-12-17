@@ -216,7 +216,7 @@ func (s *Service) GetPublicKey() []*bls.PublicKey {
 	if c == nil {
 		return nil
 	}
-	return c.ToBlsPublicKeys(keyNumber)
+	return c.ToBlsPublicKeys(keyblock.Hash())
 }
 
 // Self, call by hotstuff
@@ -655,11 +655,7 @@ func (s *Service) handleCommitteeMsg() {
 			log.Debug("committeeInfo", "number", cInfo.KeyNumber, "adddress", msg.sid.Address)
 			keyblock := s.kbc.GetBlock(cInfo.KeyHash, cInfo.KeyNumber)
 			if keyblock != nil {
-				if cInfo.Committee.RlpHash() == keyblock.CommitteeHash() {
-					cInfo.Committee.Store(keyblock)
-				} else {
-					log.Error("handleCommitteeMsg.committeeInfo", "not the committee hash keyNumber", cInfo.KeyNumber)
-				}
+				cInfo.Committee.Store(keyblock)
 			} else {
 				s.storeCommitteeInCache(cInfo, nil)
 			}
@@ -699,13 +695,7 @@ func (s *Service) updateCommittee(keyBlock *types.KeyBlock) bool {
 	}
 
 	if mb != nil {
-		if mb.RlpHash() != curKeyBlock.CommitteeHash() {
-			log.Error("updateCommittee from cache", "committee.RlpHash != keyblock.CommitteeHash keyblock number", curKeyBlock.NumberU64())
-			return bStore
-		}
-		mb.Store(curKeyBlock)
-		bStore = true
-		log.Info("updateCommittee from cache", "txNumber", s.bc.CurrentBlock().NumberU64(), "keyNumber", curKeyBlock.NumberU64(), "m0", mb.List[0].Address, "m1", mb.List[1].Address)
+		bStore = mb.Store(curKeyBlock)
 	} else {
 		log.Info("updateCommittee can't found committee", "txNumber", s.bc.CurrentBlock().NumberU64(), "keyNumber", curKeyBlock.NumberU64())
 	}

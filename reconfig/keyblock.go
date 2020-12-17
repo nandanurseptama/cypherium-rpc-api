@@ -102,7 +102,7 @@ func (keyS *keyService) verifyKeyBlock(keyblock *types.KeyBlock, bestCandi *type
 		mb := bftview.LoadMember(keyblock.NumberU64(), keyblock.Hash(), true)
 		if mb == nil {
 			mb, _ = bftview.GetCommittee(newNode, keyblock, true)
-			if mb != nil && keyblock.CommitteeHash() == mb.RlpHash() {
+			if mb != nil {
 				mb.Store(keyblock)
 			}
 		}
