@@ -138,6 +138,7 @@ func newService(sName string, conf *Reconfig) *Service {
 	return s
 }
 
+// register service for networkMsg and networkMsgAck
 func registerService(c *onet.Context) (onet.Service, error) {
 	s := &Service{ServiceProcessor: onet.NewServiceProcessor(c)}
 	s.RegisterProcessorFunc(network.RegisterMessage(&networkMsg{}), s.handleNetworkMsgReq)
@@ -149,7 +150,7 @@ func registerService(c *onet.Context) (onet.Service, error) {
 	return s, nil
 }
 
-//OnNewView --------------------------------------------------------------------------
+// When the 2F + 1 vote is collected, the onnewview event is generated
 func (s *Service) OnNewView(data []byte, extraes [][]byte) error { //buf is snapshot, //verify repla' block before newview
 	view := bftview.DecodeToView(data)
 	log.Info("OnNewView..", "txNumber", view.TxNumber, "keyNumber", view.KeyNumber)
@@ -178,7 +179,7 @@ func (s *Service) OnNewView(data []byte, extraes [][]byte) error { //buf is snap
 	return nil
 }
 
-//CurrentState call by hotstuff
+// CurrentState call by hotstuff
 func (s *Service) CurrentState() ([]byte, string) { //recv by onnewview
 	curView := s.getCurrentView()
 	leaderID := ""
@@ -198,7 +199,7 @@ func (s *Service) CurrentState() ([]byte, string) { //recv by onnewview
 	return curView.EncodeToBytes(), leaderID
 }
 
-//GetExtra call by hotstuff
+// GetExtra data of best candidate call by hotstuff
 func (s *Service) GetExtra() []byte {
 	best := s.keyService.getBestCandidate(true)
 	if best == nil {
@@ -207,7 +208,7 @@ func (s *Service) GetExtra() []byte {
 	return best.EncodeToBytes()
 }
 
-//GetPublicKey call by hotstuff
+// GetPublicKey of all current member, call by hotstuff
 func (s *Service) GetPublicKey() []*bls.PublicKey {
 	keyblock := s.kbc.CurrentBlock()
 	keyNumber := keyblock.NumberU64()
@@ -215,15 +216,15 @@ func (s *Service) GetPublicKey() []*bls.PublicKey {
 	if c == nil {
 		return nil
 	}
-	return c.ToBlsPublicKeys(keyNumber)
+	return c.ToBlsPublicKeys(keyblock.Hash())
 }
 
-//Self call by hotstuff
+// Self, call by hotstuff
 func (s *Service) Self() string {
 	return s.serverID
 }
 
-//CheckView call by hotstuff
+// Check for old data, call by hotstuff
 func (s *Service) CheckView(data []byte) error {
 	if !s.isRunning() {
 		return types.ErrNotRunning
@@ -246,7 +247,7 @@ func (s *Service) CheckView(data []byte) error {
 	return nil
 }
 
-//OnPropose call by hotstuff
+// Propose verify, call by hotstuff
 func (s *Service) OnPropose(kState []byte, tState []byte, extra []byte) error { //verify new block
 	log.Debug("OnPropose..")
 	if !s.isRunning() {
@@ -282,7 +283,7 @@ func (s *Service) OnPropose(kState []byte, tState []byte, extra []byte) error { 
 	return nil
 }
 
-//Propose call by hotstuff
+// Propose block including txs, call by hotstuff
 func (s *Service) Propose() (e error, kState []byte, tState []byte, extra []byte) { //buf recv by onpropose, onviewdown
 	log.Debug("Propose..")
 
@@ -359,7 +360,7 @@ func (s *Service) Propose() (e error, kState []byte, tState []byte, extra []byte
 	return nil, nil, data, nil
 }
 
-//OnViewDone call by hotstuff
+// Protocol done,call by hotstuff
 func (s *Service) OnViewDone(e error, phase uint64, kSign *hotstuff.SignedState, tSign *hotstuff.SignedState) error {
 	log.Info("OnViewDone", "phase", phase)
 	if !s.isRunning() {
@@ -387,7 +388,7 @@ func (s *Service) OnViewDone(e error, phase uint64, kSign *hotstuff.SignedState,
 	return nil
 }
 
-//Write call by hotstuff------------------------------------------------------------------------------------------------
+// Send data, call by hotstuff------------------------------------------------------------------------------------------------
 func (s *Service) Write(id string, data *hotstuff.HotstuffMessage) error {
 	if data.Code != hotstuff.MsgCollectTimeoutView {
 		log.Info("Write", "to id", id, "code", hotstuff.ReadableMsgType(data.Code), "ViewId", data.ViewId)
@@ -415,7 +416,7 @@ func (s *Service) Write(id string, data *hotstuff.HotstuffMessage) error {
 	return nil
 }
 
-//Broadcast call by hotstuff
+// Broadcast data, call by hotstuff
 func (s *Service) Broadcast(data *hotstuff.HotstuffMessage) []error {
 	log.Debug("Broadcast", "code", hotstuff.ReadableMsgType(data.Code), "ViewId", data.ViewId)
 	//var arr []error
@@ -441,6 +442,7 @@ func (s *Service) addHotstuffMsg(msg *hotstuffMsg) {
 	s.hotstuffMsgs.pushBack(msg)
 }
 
+// networkMsg recived call back
 func (s *Service) handleNetworkMsgReq(env *network.Envelope) {
 	msg, ok := env.Msg.(*networkMsg)
 	if !ok {
@@ -467,6 +469,7 @@ func (s *Service) handleNetworkMsgReq(env *network.Envelope) {
 
 }
 
+// Heartbeat in current member
 func (s *Service) sendHeartBeatMsg() {
 	if bftview.IamMember() < 0 {
 		return
@@ -489,6 +492,7 @@ func (s *Service) sendHeartBeatMsg() {
 	}
 }
 
+// networkMsgAck recived call back
 func (s *Service) handleNetworkMsgAckReq(env *network.Envelope) {
 	_, ok := env.Msg.(*networkMsgAck)
 	if !ok {
@@ -506,6 +510,7 @@ func (s *Service) handleNetworkMsgAckReq(env *network.Envelope) {
 	s.muNetLastMsg.Unlock()
 }
 
+// handle all hostuff message in queue of hotstuffMsgs
 func (s *Service) handleHotStuffMsg() {
 	for {
 		data := s.hotstuffMsgs.popFront()
@@ -546,7 +551,7 @@ func (s *Service) handleHotStuffMsg() {
 	}
 }
 
-//-------------------------------------------------------------------------------------------------------------------------
+// sync committee in current member
 func (s *Service) syncCommittee(mb *bftview.Committee, keyblock *types.KeyBlock) {
 	if !keyblock.HasNewNode() {
 		return
@@ -570,6 +575,7 @@ func (s *Service) syncCommittee(mb *bftview.Committee, keyblock *types.KeyBlock)
 	}
 }
 
+// Store committee in cache
 func (s *Service) storeCommitteeInCache(cmInfo *committeeInfo, best *bestCandidateInfo) {
 	s.muCommitteeInfo.Lock()
 	defer s.muCommitteeInfo.Unlock()
@@ -611,6 +617,7 @@ func (s *Service) storeCommitteeInCache(cmInfo *committeeInfo, best *bestCandida
 	s.lastCmInfoMap[keyHash] = &cachedCommitteeInfo{keyHash: keyHash, keyNumber: keyNumber, committee: committee, node: node}
 }
 
+// handle committee sync message
 func (s *Service) handleCommitteeMsg() {
 	for {
 		select {
@@ -648,11 +655,7 @@ func (s *Service) handleCommitteeMsg() {
 			log.Debug("committeeInfo", "number", cInfo.KeyNumber, "adddress", msg.sid.Address)
 			keyblock := s.kbc.GetBlock(cInfo.KeyHash, cInfo.KeyNumber)
 			if keyblock != nil {
-				if cInfo.Committee.RlpHash() == keyblock.CommitteeHash() {
-					cInfo.Committee.Store(keyblock)
-				} else {
-					log.Error("handleCommitteeMsg.committeeInfo", "not the committee hash keyNumber", cInfo.KeyNumber)
-				}
+				cInfo.Committee.Store(keyblock)
 			} else {
 				s.storeCommitteeInCache(cInfo, nil)
 			}
@@ -664,6 +667,7 @@ func (s *Service) handleCommitteeMsg() {
 	}
 }
 
+// Update committee by keyblock
 func (s *Service) updateCommittee(keyBlock *types.KeyBlock) bool {
 	bStore := false
 	curKeyBlock := keyBlock
@@ -691,13 +695,7 @@ func (s *Service) updateCommittee(keyBlock *types.KeyBlock) bool {
 	}
 
 	if mb != nil {
-		if mb.RlpHash() != curKeyBlock.CommitteeHash() {
-			log.Error("updateCommittee from cache", "committee.RlpHash != keyblock.CommitteeHash keyblock number", curKeyBlock.NumberU64())
-			return bStore
-		}
-		mb.Store(curKeyBlock)
-		bStore = true
-		log.Info("updateCommittee from cache", "txNumber", s.bc.CurrentBlock().NumberU64(), "keyNumber", curKeyBlock.NumberU64(), "m0", mb.List[0].Address, "m1", mb.List[1].Address)
+		bStore = mb.Store(curKeyBlock)
 	} else {
 		log.Info("updateCommittee can't found committee", "txNumber", s.bc.CurrentBlock().NumberU64(), "keyNumber", curKeyBlock.NumberU64())
 	}
@@ -711,6 +709,7 @@ func (s *Service) Committee_OnStored(keyblock *types.KeyBlock, mb *bftview.Commi
 	//}
 }
 
+// Request committee for keyblock
 func (s *Service) Committee_Request(kNumber uint64, hash common.Hash) {
 	if kNumber <= s.lastReqCmNumber || !bftview.IamMemberByNumber(kNumber, hash) {
 		return
@@ -742,6 +741,7 @@ func (s *Service) Committee_Request(kNumber uint64, hash common.Hash) {
 	s.lastReqCmNumber = kNumber
 }
 
+// Update current view data
 func (s *Service) updateCurrentView(fromKeyBlock bool) { //call by keyblock done
 	s.muCurrentView.Lock()
 	defer s.muCurrentView.Unlock()
@@ -778,6 +778,7 @@ func (s *Service) getBestCandidate(refresh bool) *types.Candidate {
 	return s.keyService.getBestCandidate(refresh)
 }
 
+// Send new view when new block done
 func (s *Service) sendNewViewMsg(curN uint64) {
 	if bftview.IamMember() >= 0 && curN >= s.kbc.CurrentBlock().T_Number() {
 		s.addHotstuffMsg(&hotstuffMsg{sid: nil, lastN: curN, hMsg: s.protocolMng.NewViewMessage()})
@@ -785,6 +786,7 @@ func (s *Service) sendNewViewMsg(curN uint64) {
 	}
 }
 
+// Set next leader by prescribed rules
 func (s *Service) setNextLeader(reconfigType uint8) {
 	s.muCurrentView.Lock()
 	defer s.muCurrentView.Unlock()
@@ -801,6 +803,7 @@ func (s *Service) setNextLeader(reconfigType uint8) {
 	s.waittingView.KeyNumber = s.currentView.KeyNumber + 1
 }
 
+// Ack status monitor for the node's active status
 func (s *Service) ackStatusMonitor() {
 	emptyTm := time.Time{}
 	timeOut := network.ReadTimeout
@@ -822,6 +825,7 @@ func (s *Service) ackStatusMonitor() {
 	}
 }
 
+// Send data
 func (s *Service) SendRawData1(ps ...interface{}) {
 	si := ps[0].(*network.ServerIdentity)
 	id := si.Address.String()
@@ -863,6 +867,7 @@ func (s *Service) SendRawData1(ps ...interface{}) {
 	}
 }
 
+// New block done
 func (s *Service) procBlockDone(txBlock *types.Block, keyblock *types.KeyBlock) {
 	if keyblock == nil {
 		keyblock = s.kbc.CurrentBlock()
@@ -870,6 +875,7 @@ func (s *Service) procBlockDone(txBlock *types.Block, keyblock *types.KeyBlock) 
 	s.pacetMakerTimer.procBlockDone(txBlock, keyblock)
 }
 
+// call by miner.start
 func (s *Service) start(config *common.NodeConfig) {
 	if !s.isRunning() {
 		s.serverAddress = config.Ip + ":" + config.Port
@@ -886,6 +892,7 @@ func (s *Service) start(config *common.NodeConfig) {
 	}
 }
 
+// call by miner stop
 func (s *Service) stop() {
 	if s.isRunning() {
 		//s.server.Close()

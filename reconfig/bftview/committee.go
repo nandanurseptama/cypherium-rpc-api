@@ -1,3 +1,4 @@
+// Package bftview implements Cypherium committee common operation functions.
 package bftview
 
 import (
@@ -53,6 +54,7 @@ const (
 type committeeCache struct {
 	committee *Committee
 	hasIP     bool
+	number    uint64
 	pubs      []*bls.PublicKey
 }
 
@@ -61,10 +63,11 @@ type CommitteeConfig struct {
 	keyblockchain    KeyBlockChainInterface
 	service          ServiceInterface
 	serverInfo       ServerInfo
-	cacheCommittee   map[uint64]*committeeCache
+	cacheCommittee   map[common.Hash]*committeeCache
 	muCommitteeCache sync.Mutex
 	currentMember    atomic.Value
 	commiteeLen      int
+	maxKeyNumber     uint64
 }
 
 const CommitteeCacheSize = 10
@@ -76,7 +79,7 @@ func SetCommitteeConfig(db cphdb.Database, keyblockchain KeyBlockChainInterface,
 	m_config.keyblockchain = keyblockchain
 	m_config.service = service
 
-	m_config.cacheCommittee = make(map[uint64]*committeeCache)
+	m_config.cacheCommittee = make(map[common.Hash]*committeeCache)
 	m_config.currentMember.Store(&currentMemberInfo{kNumber: 1<<63 - 1, mIndex: -1})
 	if keyblockchain != nil {
 		c := keyblockchain.CurrentCommittee()
@@ -110,9 +113,10 @@ func GetServerInfo(infoType ServerInfoType) string {
 	return ""
 }
 
+// load committee by keyblock number, needIP is for ignore ip address
 func LoadMember(kNumber uint64, hash common.Hash, needIP bool) *Committee {
 	m_config.muCommitteeCache.Lock()
-	c, ok := m_config.cacheCommittee[kNumber]
+	c, ok := m_config.cacheCommittee[hash]
 	m_config.muCommitteeCache.Unlock()
 	if ok {
 		if !needIP || c.hasIP {
@@ -123,7 +127,7 @@ func LoadMember(kNumber uint64, hash common.Hash, needIP bool) *Committee {
 	cm := ReadCommittee(kNumber, hash)
 	if cm != nil && cm.List != nil && len(cm.List) >= 0 {
 		hasIP := cm.HasIP()
-		cm.storeInCache(kNumber, hasIP)
+		cm.storeInCache(hash, kNumber, hasIP)
 		if !needIP || hasIP {
 			return cm
 		}
@@ -131,24 +135,23 @@ func LoadMember(kNumber uint64, hash common.Hash, needIP bool) *Committee {
 	return nil
 }
 
-func (committee *Committee) storeInCache(keyNumber uint64, hasIP bool) {
+// Store committee in cache
+func (committee *Committee) storeInCache(hash common.Hash, keyNumber uint64, hasIP bool) {
 	m_config.muCommitteeCache.Lock()
 	defer m_config.muCommitteeCache.Unlock()
 
-	maxN := keyNumber
-	for k, _ := range m_config.cacheCommittee {
-		if k > maxN {
-			maxN = k
+	if keyNumber > m_config.maxKeyNumber {
+		m_config.maxKeyNumber = keyNumber
+	}
+
+	maxN := m_config.maxKeyNumber
+	for h, v := range m_config.cacheCommittee {
+		if v.number < maxN-CommitteeCacheSize {
+			delete(m_config.cacheCommittee, h)
 		}
 	}
 
-	for k, _ := range m_config.cacheCommittee {
-		if k < maxN-CommitteeCacheSize {
-			delete(m_config.cacheCommittee, k)
-		}
-	}
-
-	m_config.cacheCommittee[keyNumber] = &committeeCache{committee: committee, hasIP: hasIP}
+	m_config.cacheCommittee[hash] = &committeeCache{number: keyNumber, committee: committee, hasIP: hasIP}
 }
 
 func DeleteMember(kNumber uint64, hash common.Hash) {
@@ -189,6 +192,7 @@ func IamLeader(leaderIndex uint) bool {
 	return false
 }
 
+// return the member's index in current committee
 func IamMember() int {
 	myPubKey := GetServerInfo(PublicKey)
 	if myPubKey == "" {
@@ -256,12 +260,16 @@ func (committee *Committee) Get(key string, findType ServerInfoType) (*common.Cn
 				return r, i
 			}
 		}
-
 	}
 	return nil, -1
 }
 
 func (committee *Committee) Store(keyblock *types.KeyBlock) bool {
+	if committee.RlpHash() != keyblock.CommitteeHash() {
+		log.Error("Committee.Store", "committee.RlpHash != keyblock.CommitteeHash keyblock number", keyblock.NumberU64())
+		return false
+	}
+
 	ok := WriteCommittee(keyblock.NumberU64(), keyblock.Hash(), committee)
 	if ok && m_config.service != nil {
 		m_config.service.Committee_OnStored(keyblock, committee)
@@ -270,6 +278,10 @@ func (committee *Committee) Store(keyblock *types.KeyBlock) bool {
 }
 
 func (committee *Committee) Store0(keyblock *types.KeyBlock) bool {
+	if committee.RlpHash() != keyblock.CommitteeHash() {
+		log.Error("Committee.Store", "committee.RlpHash != keyblock.CommitteeHash keyblock number", keyblock.NumberU64())
+		return false
+	}
 	ok := WriteCommittee(keyblock.NumberU64(), keyblock.Hash(), committee)
 	return ok
 }
@@ -283,6 +295,7 @@ func (committee *Committee) Copy() *Committee {
 	return p
 }
 
+// Add member node to committee, one in and one out
 func (committee *Committee) Add(r *common.Cnode, leaderIndex int, outAddress string) *common.Cnode {
 	n := len(committee.List)
 	leader := committee.List[leaderIndex]
@@ -370,9 +383,11 @@ func (committee *Committee) Leader() *common.Cnode {
 func (committee *Committee) In() *common.Cnode {
 	return committee.List[len(committee.List)-1]
 }
-func (committee *Committee) ToBlsPublicKeys(kNumber uint64) []*bls.PublicKey {
+
+// Convert committee's public key to bls public key
+func (committee *Committee) ToBlsPublicKeys(hash common.Hash) []*bls.PublicKey {
 	m_config.muCommitteeCache.Lock()
-	c, ok := m_config.cacheCommittee[kNumber]
+	c, ok := m_config.cacheCommittee[hash]
 	m_config.muCommitteeCache.Unlock()
 	if ok && c.pubs != nil {
 		//log.Info("ToBlsPublicKeys found in cache")
@@ -412,9 +427,9 @@ func (committee *Committee) HasIP() bool {
 }
 
 //------Tools---------------------------------------------------------------------------------------------------------
-func ToBlsPublicKeys(kNumber uint64) []*bls.PublicKey {
+func ToBlsPublicKeys(hash common.Hash) []*bls.PublicKey {
 	m_config.muCommitteeCache.Lock()
-	c, ok := m_config.cacheCommittee[kNumber]
+	c, ok := m_config.cacheCommittee[hash]
 	m_config.muCommitteeCache.Unlock()
 	if ok && c.pubs != nil {
 		//log.Info("ToBlsPublicKeys found in cache")

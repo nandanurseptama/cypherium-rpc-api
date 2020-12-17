@@ -46,6 +46,7 @@ func newPaceMakerTimer(config *params.ChainConfig, s serviceI, cph Backend) (vTi
 
 }
 
+// Start for time counting of pacemake
 func (t *paceMakerTimer) start() error {
 	t.Lock()
 	defer t.Unlock()
@@ -63,6 +64,7 @@ func (t *paceMakerTimer) start() error {
 	return nil
 }
 
+// Stop for time counting of pacemake
 func (t *paceMakerTimer) stop() error {
 	t.Lock()
 	defer t.Unlock()
@@ -72,11 +74,13 @@ func (t *paceMakerTimer) stop() error {
 	return nil
 }
 
+// Close pacemake loop
 func (t *paceMakerTimer) close() {
 	t.Lock()
 	defer t.Unlock()
 	t.beClose = true
 }
+
 func (t *paceMakerTimer) get() (time.Time, bool, bool, int) {
 	t.Lock()
 	defer t.Unlock()
@@ -84,6 +88,7 @@ func (t *paceMakerTimer) get() (time.Time, bool, bool, int) {
 
 }
 
+// Loop for status action
 func (t *paceMakerTimer) loopTimer() {
 	lastHeartBeatTm := time.Now()
 	for {
@@ -132,6 +137,7 @@ func (t *paceMakerTimer) loopTimer() {
 var m_totalTxs int
 var m_tps10StartTm time.Time
 
+// Event for new block done
 func (t *paceMakerTimer) procBlockDone(curBlock *types.Block, curKeyBlock *types.KeyBlock) {
 	if curBlock != nil {
 		if t.config.EnabledTPS {
@@ -175,6 +181,7 @@ func (t *paceMakerTimer) procBlockDone(curBlock *types.Block, curKeyBlock *types
 
 }
 
+// Event for New TXS coming
 func (t *paceMakerTimer) onNewTx() {
 	t.Lock()
 	defer t.Unlock()

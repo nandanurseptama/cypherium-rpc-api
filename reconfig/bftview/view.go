@@ -20,9 +20,12 @@ type View struct {
 	ReconfigType  uint8
 }
 
+// Check for identity
 func (v *View) EqualAll(other *View) bool {
 	return v.TxNumber == other.TxNumber && v.TxHash == other.TxHash && v.KeyNumber == other.KeyNumber && v.KeyHash == other.KeyHash && v.CommitteeHash == other.CommitteeHash && v.LeaderIndex == other.LeaderIndex && v.ReconfigType == other.ReconfigType
 }
+
+// Check for identity except index
 func (v *View) EqualNoIndex(other *View) bool {
 	return v.TxNumber == other.TxNumber && v.TxHash == other.TxHash && v.KeyNumber == other.KeyNumber && v.KeyHash == other.KeyHash
 }
