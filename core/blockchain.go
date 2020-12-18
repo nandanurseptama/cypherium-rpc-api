@@ -1076,7 +1076,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, skipSig bool) (int, []inte
 	// Sanity check that we have something meaningful to import
 	curBlock := bc.CurrentBlock()
 	curBlockNumber := curBlock.NumberU64()
-	if len(chain) == 0 || chain[0].NumberU64() <= curBlockNumber {
+	if len(chain) == 0 || chain[0].NumberU64() < curBlockNumber {
 		return 0, nil, nil, nil
 	}
 

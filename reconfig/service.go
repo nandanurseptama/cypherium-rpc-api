@@ -475,6 +475,9 @@ func (s *Service) sendHeartBeatMsg() {
 		return
 	}
 	mb := bftview.GetCurrentMember()
+	if mb == nil {
+		return
+	}
 	for _, node := range mb.List {
 		if node.Address != s.serverAddress {
 			s.muNetLastMsg.Lock()
