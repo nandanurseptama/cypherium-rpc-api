@@ -130,11 +130,5 @@ func (reconf *Reconfig) Stop() {
 //ReconfigIsRunning call by backend
 func (reconf *Reconfig) ReconfigIsRunning() bool {
 	log.Info("reconfig ReconfigIsRunning")
-	keyblock := reconf.cph.KeyBlockChain().CurrentBlock()
-	bftview.DeleteCommittee(keyblock.NumberU64(), keyblock.Hash())
-
-	mb := bftview.ReadCommittee(keyblock.NumberU64()-1, keyblock.ParentHash())
-	bftview.WriteCommittee(keyblock.NumberU64(), keyblock.Hash(), mb)
-
 	return reconf.service.isRunning()
 }
