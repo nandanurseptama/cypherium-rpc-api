@@ -165,7 +165,6 @@ func (v *BlockValidator) VerifySignature(block *types.Block) error {
 	if !hotstuff.VerifySignature(block.Signature(), block.Exceptions(), buff.Bytes(), pubs) {
 		kh := keychain.GetHeaderByHash(KeyHash)
 		if kh.Number.Uint64() == 16 { //fix keyblock number =16
-			bftview.DeleteMember(16, KeyHash)
 			keyblock := keychain.GetBlock(KeyHash, 16)
 			newNode := &common.Cnode{
 				CoinBase: keyblock.InAddress(),
