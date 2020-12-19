@@ -186,8 +186,8 @@ func packageHeader(keyHash common.Hash, parent *types.Block, state *state.StateD
 	now := time.Now()
 	log.Info("packageHeader", "parent number=", parent.NumberU64())
 
-	d, _ := time.ParseDuration("-24h")
-	now = now.Add(2 * d)
+	//d, _ := time.ParseDuration("-24h")
+	//now = now.Add(2 * d)
 
 	tstamp := now.UnixNano()
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
