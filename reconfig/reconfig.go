@@ -3,6 +3,7 @@ package reconfig
 import (
 	"net"
 	"sync"
+	"time"
 
 	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core"
@@ -27,9 +28,9 @@ type Reconfig struct {
 	mux *event.TypeMux
 	mu  sync.Mutex
 
-	reconfigSub *event.TypeMuxSubscription
-	txsCh       chan core.NewTxsEvent
-	txsSub      event.Subscription
+	//	reconfigSub *event.TypeMuxSubscription
+	txsCh  chan core.NewTxsEvent
+	txsSub event.Subscription
 }
 
 // Backend wraps all methods required for mining.
@@ -47,15 +48,16 @@ type serviceI interface {
 	updateCommittee(keyBlock *types.KeyBlock) bool
 	updateCurrentView(fromKeyBlock bool)
 	procBlockDone(txBlock *types.Block, keyblock *types.KeyBlock)
-	getCurrentView() *bftview.View
+	GetCurrentView() *bftview.View
 	getBestCandidate(refresh bool) *types.Candidate
 	syncCommittee(mb *bftview.Committee, keyblock *types.KeyBlock)
 	setNextLeader(reconfigType uint8)
 	sendNewViewMsg(curN uint64)
-	sendHeartBeatMsg()
+	LeaderAckTime() time.Time
+	ResetLeaderAckTime()
 }
 
-//NewReconfig call by cph backend when initializing
+//NewReconfig call by backend
 func NewReconfig(db cphdb.Database, cph Backend, config *params.ChainConfig, mux *event.TypeMux, engine pow.Engine, extIP net.IP) *Reconfig {
 	reconfig := &Reconfig{mux: mux, cph: cph, config: config, engine: engine, db: db}
 
@@ -66,8 +68,8 @@ func NewReconfig(db cphdb.Database, cph Backend, config *params.ChainConfig, mux
 	reconfig.service.pacetMakerTimer = newPaceMakerTimer(config, reconfig.service, cph)
 	go reconfig.service.pacetMakerTimer.loopTimer()
 
-	reconfig.reconfigSub = mux.Subscribe(core.NewCandidateEvent{}, core.KeyChainHeadEvent{})
-	go reconfig.update()
+	//reconfig.reconfigSub = mux.Subscribe(core.NewCandidateEvent{}, core.KeyChainHeadEvent{})
+	//go reconfig.update()
 
 	reconfig.txsCh = make(chan core.NewTxsEvent, 1024)
 	reconfig.txsSub = cph.TxPool().SubscribeNewTxsEvent(reconfig.txsCh)
@@ -76,7 +78,7 @@ func NewReconfig(db cphdb.Database, cph Backend, config *params.ChainConfig, mux
 	return reconfig
 }
 
-// Monitoring keyblock and newcandidate events
+/*
 func (reconf *Reconfig) update() {
 	for ev := range reconf.reconfigSub.Chan() {
 		if !reconf.service.isRunning() {
@@ -99,7 +101,7 @@ func (reconf *Reconfig) update() {
 	}
 	log.Info("quit Reconfig.update")
 }
-
+*/
 // Monitoring new txs Event
 func (reconf *Reconfig) txsEventLoop() {
 	for {
@@ -129,6 +131,5 @@ func (reconf *Reconfig) Stop() {
 
 //ReconfigIsRunning call by backend
 func (reconf *Reconfig) ReconfigIsRunning() bool {
-	log.Info("reconfig ReconfigIsRunning")
-	return reconf.service.isRunning()
+	return reconf.service.isRunning(1)
 }

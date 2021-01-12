@@ -73,7 +73,7 @@ func NewRouter(own *ServerIdentity, h Host) *Router {
 	}
 	r.address = h.Address()
 	r.sendsMap = make(map[ServerIdentityID]int)
-	log.Info("New router", "address", r.address, "public key", r.ServerIdentity.Public)
+	log.Info("New router", "address", r.address)
 	return r
 }
 
@@ -162,6 +162,20 @@ func (r *Router) Stop() error {
 	return nil
 }
 
+func (r *Router) GetBlocks(e *ServerIdentity) int {
+	if e != nil {
+		r.sendMu.Lock()
+		blocksLen := r.sendsMap[e.ID]
+		r.sendMu.Unlock()
+		return blocksLen
+	} else {
+		for id, _ := range r.connections {
+			log.Info("NetBlocks", "id", id, "num", r.sendsMap[id])
+		}
+	}
+	return 0
+}
+
 // Send sends to an ServerIdentity without wrapping the msg into a ProtocolMsg
 func (r *Router) Send(e *ServerIdentity, msg Message, bForeConnect bool) (uint64, error) {
 	if msg == nil {
@@ -170,10 +184,10 @@ func (r *Router) Send(e *ServerIdentity, msg Message, bForeConnect bool) (uint64
 
 	r.sendMu.Lock()
 	blocksLen := r.sendsMap[e.ID]
-	if blocksLen > params.MaxSendBlocks { //max queue is 20
+	if blocksLen > params.MaxSendBlocks { //max queue is 5
 		r.sendMu.Unlock()
 		log.Info("Router.Send", "busy address", e.Address.String())
-		return 0, errors.New("the address:" + e.Address.String() + " maybe busy or not online!")
+		return 0, params.SendOverFlowErr
 	}
 	r.sendsMap[e.ID]++
 	r.sendMu.Unlock()
@@ -221,7 +235,7 @@ func (r *Router) Send(e *ServerIdentity, msg Message, bForeConnect bool) (uint64
 		}
 	}
 
-	log.Debug("Send msg", "address", r.address, "to", e, "msg", msg)
+	//log.Debug("Send msg", "address", r.address, "to", e, "msg", msg)
 	sentLen, err := c.Send(msg)
 	totSentLen += sentLen
 	if err != nil {
@@ -244,7 +258,7 @@ func (r *Router) Send(e *ServerIdentity, msg Message, bForeConnect bool) (uint64
 // connect starts a new connection and launches the listener for incoming
 // messages.
 func (r *Router) connect(si *ServerIdentity) (Conn, uint64, error) {
-	log.Debug("Connect", r.address, "Connecting to", si.Address)
+	log.Debug("Connect", "Connecting to", si.Address)
 	c, err := r.host.Connect(si)
 	if err != nil {
 		log.Error("Connect", "Could not connect to", si.Address, "error", err)
@@ -458,7 +472,7 @@ func (r *Router) receiveServerIdentity(c Conn) (*ServerIdentity, error) {
 	// Set the ServerIdentity for this connection
 	dst := nm.Msg.(*ServerIdentity)
 
-	log.Debug("receiveServerIdentity", "", r.address, "Identity received si=", dst.Public, "from", dst.Address)
+	log.Debug("receiveServerIdentity", "", r.address, "from", dst.Address)
 	return dst, nil
 }
 

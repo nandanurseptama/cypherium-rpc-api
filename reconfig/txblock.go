@@ -69,28 +69,29 @@ func (txS *txService) tryProposalNewBlock(blockType uint8) ([]byte, error) {
 // Verify txBlock
 func (txS *txService) verifyTxBlock(txblock *types.Block) error {
 	var retErr error
-	defer func() {
-		if retErr == nil {
-			//insert chain
-			//??	go s.bc.InsertBlockWithNoSignature(txblock)
-		}
-	}()
-
+	/*
+		defer func() {
+			if retErr == nil {
+				//insert chain
+				//??	go s.bc.InsertBlockWithNoSignature(txblock)
+			}
+		}()
+	*/
 	bc := txS.bc
 	kbc := txS.kbc
 	blockNum := txblock.NumberU64()
 	header := txblock.Header()
 	log.Info("verifyTxBlock", "txblock num", blockNum)
 
-	if blockNum <= bc.CurrentBlock().NumberU64() {
-		retErr = fmt.Errorf("invalid header, number:%d, current block number:%d", blockNum, bc.CurrentBlock().NumberU64())
+	if blockNum <= bc.CurrentBlockN() {
+		retErr = fmt.Errorf("invalid header, number:%d, current block number:%d", blockNum, bc.CurrentBlockN())
 		return retErr
 	}
 	if header.KeyHash != kbc.CurrentBlock().Hash() {
 		retErr = fmt.Errorf("keyhash:%x does not match current keyhash: %x", header.KeyHash, kbc.CurrentBlock().Hash())
 		return retErr
 	}
-	if bftview.IamLeader(txS.s.getCurrentView().LeaderIndex) {
+	if bftview.IamLeader(txS.s.GetCurrentView().LeaderIndex) {
 		return nil
 	}
 	err := bc.Validator.VerifyHeader(header)
@@ -189,7 +190,7 @@ func packageHeader(keyHash common.Hash, parent *types.Block, state *state.StateD
 	//d, _ := time.ParseDuration("-24h")
 	//now = now.Add(2 * d)
 
-	tstamp := now.UnixNano()
+	tstamp := now.UnixNano() //int64(1604127144173089000) //
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
 		tstamp = parent.Time().Int64() + 1
 	}

@@ -40,7 +40,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		GPO                     gasprice.Config
 		EnablePreimageRecording bool
 		DocRoot                 string `toml:"-"`
-		PublicKeyDir            string
 		OnetPort                string
 	}
 	var enc Config
@@ -65,7 +64,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.GPO = c.GPO
 	enc.EnablePreimageRecording = c.EnablePreimageRecording
 	enc.DocRoot = c.DocRoot
-	enc.PublicKeyDir = c.PublicKeyDir
 	enc.OnetPort = c.OnetPort
 	return &enc, nil
 }
@@ -94,7 +92,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		GPO                     *gasprice.Config
 		EnablePreimageRecording *bool
 		DocRoot                 *string `toml:"-"`
-		PublicKeyDir            *string
 		OnetPort                *string
 	}
 	var dec Config
@@ -164,11 +161,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.DocRoot != nil {
 		c.DocRoot = *dec.DocRoot
 	}
-	if dec.PublicKeyDir != nil {
-		c.PublicKeyDir = *dec.PublicKeyDir
-	}
 	if dec.OnetPort != nil {
 		c.OnetPort = *dec.OnetPort
 	}
+
 	return nil
 }

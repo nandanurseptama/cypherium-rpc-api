@@ -249,6 +249,7 @@ func (self *worker) commitNewWork() {
 	keyBlock := self.chain.CurrentBlock() // todo: current keybBlock
 	txBlock := self.cph.BlockChain().CurrentBlock()
 	if txBlock.NumberU64() < keyBlock.T_Number() {
+		log.Error("worker.commitNewWork is too low", "number", txBlock.NumberU64())
 		return
 	}
 	if cphash.Mode(self.engine.PowMode()) != cphash.ModeLocalMock {

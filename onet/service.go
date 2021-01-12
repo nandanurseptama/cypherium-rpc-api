@@ -27,7 +27,7 @@ type Service interface {
 	// to instantiate the protocol. A Service is expected to manually create
 	// the ProtocolInstance it is using. If a Service returns (nil,nil), that
 	// means this Service lets Onet handle the protocol instance.
-	NewProtocol(*TreeNodeInstance, *GenericConfig) (ProtocolInstance, error)
+	//NewProtocol(*TreeNodeInstance, *GenericConfig) (ProtocolInstance, error)
 	// ProcessClientRequest is called when a message from an
 	// external client is received by the websocket for this
 	// service. It returns a message that will be sent back to the
@@ -202,36 +202,22 @@ type serviceManager struct {
 	services map[ServiceID]Service
 	// the onet host
 	server *Server
-	// a bbolt database for all services
-	//	db     *bolt.DB
-	//dbPath string
-	// should the db be deleted on close?
-	//	delDb bool
-	// the dispatcher can take registration of Processors
 	network.Dispatcher
 }
 
 // newServiceManager will create a serviceStore out of all the registered Service
-func newServiceManager(svr *Server, o *Overlay) *serviceManager {
+func newServiceManager(svr *Server) *serviceManager {
 	services := make(map[ServiceID]Service)
 	s := &serviceManager{
-		services: services,
-		server:   svr,
-		//		dbPath:     dbPath,
-		//		delDb:      delDb,
+		services:   services,
+		server:     svr,
 		Dispatcher: network.NewRoutineDispatcher(),
 	}
 	ids := ServiceFactory.registeredServiceIDs()
 	for _, id := range ids {
 		name := ServiceFactory.Name(id)
 		log.Info("Starting service", "name", name)
-		/*
-			err = createBucketForService(s.db, name)
-			if err != nil {
-				panic(err)
-			}
-		*/
-		cont := newContext(svr, o, id, s)
+		cont := newContext(svr, id, s)
 		s, err := ServiceFactory.start(name, cont)
 		if err != nil {
 			panic("Trying to instantiate service:" + name + ":" + err.Error())
@@ -240,7 +226,6 @@ func newServiceManager(svr *Server, o *Overlay) *serviceManager {
 		services[id] = s
 	}
 	log.Info("instantiated all services", "address", svr.Address())
-	svr.statusReporterStruct.RegisterStatusReporter("Db", s)
 	return s
 }
 
@@ -249,11 +234,6 @@ func newServiceManager(svr *Server, o *Overlay) *serviceManager {
 func (s *serviceManager) Process(env *network.Envelope) {
 	// will launch a go routine for that message
 	s.Dispatch(env)
-}
-
-// GetStatus is a function that returns the status report of the server.
-func (s *serviceManager) GetStatus() *Status {
-	return &Status{Field: map[string]string{"Open": "false"}}
 }
 
 // registerProcessor the processor to the service manager and tells the host to dispatch
@@ -304,32 +284,4 @@ func (s *serviceManager) serviceByID(id ServiceID) (Service, bool) {
 		return nil, false
 	}
 	return serv, true
-}
-
-// newProtocol contains the logic of how and where a ProtocolInstance is
-// created. If the token's ServiceID is nil, then onet handles the creation of
-// the PI. If the corresponding service returns (nil,nil), then onet handles
-// the creation of the PI. Otherwise the service is responsible for setting up
-// the PI.
-func (s *serviceManager) newProtocol(tni *TreeNodeInstance, config *GenericConfig) (pi ProtocolInstance, err error) {
-	si, ok := s.serviceByID(tni.Token().ServiceID)
-	defaultHandle := func() (ProtocolInstance, error) { return s.server.protocolInstantiate(tni.Token().ProtoID, tni) }
-	if !ok {
-		// let onet handle it
-		return defaultHandle()
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			pi = nil
-			err = fmt.Errorf("could not create new protocol: %v", r)
-			return
-		}
-	}()
-
-	pi, err = si.NewProtocol(tni, config)
-	if pi == nil && err == nil {
-		return defaultHandle()
-	}
-	return
 }

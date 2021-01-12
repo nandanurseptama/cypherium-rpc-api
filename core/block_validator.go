@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core/state"
 	"github.com/cypherium/cypherBFT/core/types"
 	"github.com/cypherium/cypherBFT/log"
@@ -162,18 +161,7 @@ func (v *BlockValidator) VerifySignature(block *types.Block) error {
 	if err != nil {
 		return err
 	}
-	if !hotstuff.VerifySignature(block.Signature(), block.Exceptions(), buff.Bytes(), pubs) {
-		kh := keychain.GetHeaderByHash(KeyHash)
-		if kh.Number.Uint64() == 16 { //fix keyblock number =16
-			keyblock := keychain.GetBlock(KeyHash, 16)
-			newNode := &common.Cnode{
-				CoinBase: keyblock.InAddress(),
-				Public:   keyblock.InPubKey(),
-			}
-			mb, _ := bftview.GetCommittee(newNode, keyblock, false)
-			mb.Store0(keyblock)
-		}
-
+	if !hotstuff.VerifySignature(block.Signature(), block.Exceptions(), buff.Bytes(), pubs, (len(pubs)+1)*2/3) {
 		return types.ErrInvalidSignature
 	}
 

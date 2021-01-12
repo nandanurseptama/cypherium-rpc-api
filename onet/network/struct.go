@@ -3,13 +3,9 @@ package network
 import (
 	"errors"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/cypherium/cypherBFT/log"
-	"github.com/dedis/kyber"
-	"github.com/dedis/kyber/util/encoding"
 	"github.com/dedis/protobuf"
 	uuid "gopkg.in/satori/go.uuid.v1"
 )
@@ -19,9 +15,6 @@ const MaxRetryConnect = 3
 
 // WaitRetry is the timeout on connection-setups.
 const WaitRetry = 20 * time.Millisecond
-
-// MaxIdentityExchange is the timeout for an identityExchange.
-const MaxIdentityExchange = 5 * time.Second
 
 // ErrClosed is when a connection has been closed.
 var ErrClosed = errors.New("Connection Closed")
@@ -63,11 +56,9 @@ type Envelope struct {
 }
 
 // ServerIdentity is used to represent a Server in the whole internet.
-// It's based on a public key, and there can be one or more addresses to contact it.
+// It's based on a address key, and there can be one or more addresses to contact it.
 type ServerIdentity struct {
-	// This is the public key of that ServerIdentity
-	Public kyber.Point
-	// The ServerIdentityID corresponding to that public key
+	// The ServerIdentityID corresponding to that address key
 	ID ServerIdentityID
 	// A slice of addresses of where that Id might be found
 	Address Address
@@ -100,42 +91,15 @@ func (si *ServerIdentity) String() string {
 // ServerIdentityType can be used to recognise an ServerIdentity-message
 var ServerIdentityType = RegisterMessage(ServerIdentity{})
 
-// ServerIdentityToml is the struct that can be marshalled into a toml file
-type ServerIdentityToml struct {
-	Public  string
-	Address Address
-}
-
-// NewServerIdentity creates a new ServerIdentity based on a public key and with a slice
+// NewServerIdentity creates a new ServerIdentity based on a address key and with a slice
 // of IP-addresses where to find that entity. The Id is based on a
-// version5-UUID which can include a URL that is based on it's public key.
-func NewServerIdentity(public kyber.Point, address Address) *ServerIdentity {
+// version5-UUID which can include a URL that is based on it's address key.
+func NewServerIdentity(address string) *ServerIdentity {
 	si := &ServerIdentity{
-		Public:  public,
-		Address: address,
+		Address: Address("kcp://" + address),
 	}
-	if public != nil {
-		url := NamespaceURL + "id/" + public.String()
-		si.ID = ServerIdentityID(uuid.NewV5(uuid.NamespaceURL, url))
-	}
+	si.ID = ServerIdentityID(uuid.NewV5(uuid.NamespaceURL, NamespaceURL+"id/"+address))
 	return si
-}
-
-// Equal tests on same public key
-func (si *ServerIdentity) Equal(e2 *ServerIdentity) bool {
-	return si.Public.Equal(e2.Public)
-}
-
-// ServerIdentity converts an ServerIdentityToml structure back to an ServerIdentity
-func (si *ServerIdentityToml) ServerIdentity(suite Suite) *ServerIdentity {
-	pub, err := encoding.ReadHexPoint(suite, strings.NewReader(si.Public))
-	if err != nil {
-		log.Error("ServerIdentity", "Error while reading public key:", err)
-	}
-	return &ServerIdentity{
-		Public:  pub,
-		Address: si.Address,
-	}
 }
 
 // GlobalBind returns the global-binding address. Given any IP:PORT combination,

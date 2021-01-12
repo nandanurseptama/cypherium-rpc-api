@@ -115,9 +115,8 @@ type Config struct {
 	EnablePreimageRecording bool
 
 	// Miscellaneous options
-	DocRoot      string `toml:"-"`
-	PublicKeyDir string
-	OnetPort     string
+	DocRoot  string `toml:"-"`
+	OnetPort string
 }
 
 type configMarshaling struct {

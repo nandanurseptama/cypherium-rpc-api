@@ -51,12 +51,11 @@ const (
 	MsgDecide
 
 	// pseudo messages
-	MsgCollectTimeoutView // for handling timeout
-	MsgStartNewView       // for handling new view from app
+	MsgStartNewView // for handling new view from app
 	MsgTryPropose
 )
 
-func ReadableMsgType(m uint64) string {
+func ReadableMsgType(m uint32) string {
 	switch {
 	case m == MsgNewView:
 		return "MsgNewView"
@@ -74,8 +73,6 @@ func ReadableMsgType(m uint64) string {
 		return "MsgVoteCommit"
 	case m == MsgDecide:
 		return "MsgDecide"
-	case m == MsgCollectTimeoutView:
-		return "MsgCollectTimeoutView"
 	case m == MsgStartNewView:
 		return "MsgStartNewView"
 	case m == MsgTryPropose:
@@ -95,7 +92,7 @@ const (
 	PhaseFinal
 )
 
-func readablePhase(code uint64) string {
+func readablePhase(code uint32) string {
 	switch {
 	case code == PhasePrepare:
 		return "PhasePrepare"
@@ -129,12 +126,12 @@ type HotStuffApplication interface {
 	GetPublicKey() []*bls.PublicKey
 
 	OnNewView(currentState []byte, extra [][]byte) error
-	OnPropose(kState []byte, tState []byte, extra []byte) error
-	OnViewDone(e error, phase uint64, kSign *SignedState, tSign *SignedState) error
+	OnPropose(isKeyBlock bool, state []byte, extra []byte) error
+	OnViewDone(kSign *SignedState, tSign *SignedState) error
 
 	CheckView(currentState []byte) error
 	Propose() (e error, kState []byte, tState []byte, extra []byte)
-	CurrentState() ([]byte, string)
+	CurrentState() ([]byte, string, uint64)
 	GetExtra() []byte // only for new-view procedure
 }
 
@@ -154,7 +151,8 @@ type QC struct {
 }
 
 type HotstuffMessage struct {
-	Code   uint64
+	Code   uint32
+	Number uint64
 	ViewId common.Hash
 	Id     string
 	PubKey []byte
@@ -171,16 +169,13 @@ type HotstuffMessage struct {
 	ReceivedAt time.Time
 }
 
-func (m *HotstuffMessage) touch() {
-	m.ReceivedAt = time.Now()
-}
-
 type View struct {
 	hash           common.Hash // hash on "currentState + leaderId", hence should be unique and equal for the same view and leader
 	createdAt      time.Time
+	number         uint64
 	leaderId       string
-	phaseAsLeader  uint64
-	phaseAsReplica uint64
+	phaseAsLeader  uint32
+	phaseAsReplica uint32
 	currentState   []byte
 	proposedKState []byte
 	proposedTState []byte
@@ -216,33 +211,20 @@ func (v *View) hasTState() bool {
 type HotstuffProtocolManager struct {
 	secretKey    *bls.SecretKey
 	publicKey    *bls.PublicKey
-	timeout      time.Duration
-	tickerPeriod time.Duration
 	views        map[common.Hash]*View
 	leaderView   *View
 	app          HotStuffApplication
-	exit         chan bool
 	unhandledMsg map[common.Hash]*HotstuffMessage // messages which is not handled(which phase is ahead of local's)
 }
 
-func NewHotstuffProtocolManager(a HotStuffApplication, secretKey *bls.SecretKey, publicKey *bls.PublicKey, t time.Duration) *HotstuffProtocolManager {
+func NewHotstuffProtocolManager(a HotStuffApplication, secretKey *bls.SecretKey, publicKey *bls.PublicKey) *HotstuffProtocolManager {
 	manager := &HotstuffProtocolManager{
 		secretKey:    secretKey,
 		publicKey:    publicKey,
 		app:          a,
-		timeout:      t,
-		tickerPeriod: 60 * time.Second,
 		views:        make(map[common.Hash]*View),
-		exit:         make(chan bool),
 		unhandledMsg: make(map[common.Hash]*HotstuffMessage),
 	}
-
-	if int64(t) > 0 {
-		manager.timeout = t
-	}
-
-	go manager.collectTimeoutView()
-
 	return manager
 }
 
@@ -313,9 +295,10 @@ func (v *View) msgToQuorum(m *HotstuffMessage) (error, *Quorum) {
 	return nil, &qrum
 }
 
-func (hsm *HotstuffProtocolManager) newMsg(code uint64, viewId common.Hash, a []byte, b []byte, c []byte) *HotstuffMessage {
+func (hsm *HotstuffProtocolManager) newMsg(code uint32, number uint64, viewId common.Hash, a []byte, b []byte, c []byte) *HotstuffMessage {
 	msg := &HotstuffMessage{
 		Code:   code,
+		Number: number,
 		ViewId: viewId,
 		Id:     hsm.app.Self(),
 	}
@@ -345,13 +328,14 @@ func (hsm *HotstuffProtocolManager) newMsg(code uint64, viewId common.Hash, a []
 }
 
 func (hsm *HotstuffProtocolManager) newView() (*View, []byte) {
-	currentState, leaderId := hsm.app.CurrentState()
+	currentState, leaderId, number := hsm.app.CurrentState()
 	if leaderId == "" {
 		return nil, nil
 	}
 
 	v := &View{
 		phaseAsReplica:   PhasePrepare,
+		number:           number,
 		leaderId:         leaderId,
 		highQuorum:       make([]*Quorum, 0),
 		prepareQuorum:    make([]*Quorum, 0),
@@ -363,6 +347,7 @@ func (hsm *HotstuffProtocolManager) newView() (*View, []byte) {
 		stopTReplicaCh:   make(chan bool),
 		extra:            make([][]byte, 0),
 		futureNewViewMsg: make([]*HotstuffMessage, 0),
+		createdAt:        time.Now(),
 	}
 
 	v.currentState = make([]byte, len(currentState))
@@ -381,8 +366,9 @@ func (hsm *HotstuffProtocolManager) newView() (*View, []byte) {
 	return v, hsm.app.GetExtra()
 }
 
-func (hsm *HotstuffProtocolManager) createView(asLeader bool, phase uint64, leaderId string, currentState []byte) *View {
+func (hsm *HotstuffProtocolManager) createView(asLeader bool, phase uint32, leaderId string, currentState []byte, number uint64) *View {
 	v := &View{
+		number:           number,
 		leaderId:         leaderId,
 		highQuorum:       make([]*Quorum, 0),
 		prepareQuorum:    make([]*Quorum, 0),
@@ -392,6 +378,7 @@ func (hsm *HotstuffProtocolManager) createView(asLeader bool, phase uint64, lead
 		leaderMsg:        make(map[uint64]*HotstuffMessage),
 		extra:            make([][]byte, 0),
 		futureNewViewMsg: make([]*HotstuffMessage, 0),
+		createdAt:        time.Now(),
 	}
 
 	if asLeader {
@@ -444,20 +431,6 @@ func (hsm *HotstuffProtocolManager) DumpView(v *View, asLeader bool) {
 	*/
 }
 
-func (hsm *HotstuffProtocolManager) addView(v *View) {
-	v.createdAt = time.Now()
-	hsm.views[v.hash] = v
-}
-
-func (hsm *HotstuffProtocolManager) removeView(v *View) {
-	delete(hsm.views, v.hash)
-}
-
-func (hsm *HotstuffProtocolManager) lookupView(hash common.Hash) (*View, bool) {
-	v, e := hsm.views[hash]
-	return v, e
-}
-
 func (hsm *HotstuffProtocolManager) lockView(v *View) {
 	for k, view := range hsm.views {
 		if bytes.Equal(v.hash[:], view.hash[:]) {
@@ -475,10 +448,9 @@ func (hsm *HotstuffProtocolManager) lockView(v *View) {
 }
 
 func (hsm *HotstuffProtocolManager) viewDone(v *View, kSign []byte, tSign []byte, mask []byte, e error) {
-	phase := v.phaseAsReplica
 	if e != nil {
 		log.Warn("view finished with error", "error", e, "ViewId", v.hash)
-		hsm.app.OnViewDone(e, phase, nil, nil)
+		hsm.app.OnViewDone(nil, nil)
 	} else {
 		elapsed := time.Now().Sub(v.createdAt).Nanoseconds() / 1000000
 
@@ -523,8 +495,30 @@ func (hsm *HotstuffProtocolManager) viewDone(v *View, kSign []byte, tSign []byte
 			*/
 		}
 
-		hsm.app.OnViewDone(nil, phase, kSignedState, tSignedState)
+		hsm.app.OnViewDone(kSignedState, tSignedState)
 	}
+}
+
+func (hsm *HotstuffProtocolManager) clearTimeoutView(curN uint64) error {
+	now := time.Now()
+	for _, v := range hsm.views {
+		if v.number < curN {
+			log.Debug("Remove timeout view", "viewId", v.hash, "phase", readablePhase(v.phaseAsReplica), "pas time", now.Sub(v.createdAt).Seconds())
+			if v.phaseAsReplica < PhaseFinal {
+				hsm.viewDone(v, nil, nil, nil, ErrViewTimeout)
+			}
+			delete(hsm.views, v.hash)
+		}
+	}
+
+	for k, m := range hsm.unhandledMsg {
+		if m.Number < curN {
+			log.Debug("Remove unhandled hotstuff message", "viewId", m.ViewId, "code", m.Code, "from", m.Id, "past time", now.Sub(m.ReceivedAt).Seconds())
+			delete(hsm.unhandledMsg, k)
+		}
+	}
+
+	return nil
 }
 
 // for replica
@@ -534,15 +528,18 @@ func (hsm *HotstuffProtocolManager) NewView() error {
 		return ErrNewViewFail
 	}
 
-	if _, exist := hsm.lookupView(v.hash); !exist {
-		hsm.addView(v)
+	if _, exist := hsm.views[v.hash]; !exist {
+		hsm.views[v.hash] = v
 	}
 
 	sig := hsm.secretKey.SignHash(crypto.Keccak256(v.currentState)).Serialize()
-	msg := hsm.newMsg(MsgNewView, v.hash, v.currentState, sig, extra)
+	msg := hsm.newMsg(MsgNewView, v.number, v.hash, v.currentState, sig, extra)
 
 	log.Debug("New View", "leader", v.leaderId, "ViewID", common.HexString(v.hash[:]))
 	err := hsm.app.Write(v.leaderId, msg)
+	if err != nil {
+		hsm.clearTimeoutView(v.number) //clear old view
+	}
 
 	return err
 }
@@ -616,11 +613,12 @@ func (hsm *HotstuffProtocolManager) lookupQuorum(pubKey *bls.PublicKey, quorum [
 
 // for leader
 func (hsm *HotstuffProtocolManager) handleNewViewMsg(msg *HotstuffMessage) error {
+
 	//start := time.Now()
-	defer func() {
-		//	handleTime := time.Now().Sub(start).Nanoseconds() / 1000000
-		//	log.Debug("handleNewViewMsg handle time", "ellpased", handleTime)
-	}()
+	//defer func() {
+	//	handleTime := time.Now().Sub(start).Nanoseconds() / 1000000
+	//	log.Debug("handleNewViewMsg handle time", "ellpased", handleTime)
+	//}()
 
 	log.Info("handleNewViewMsg got new view message", "from", msg.Id, "viewId", msg.ViewId)
 	err := hsm.app.CheckView(msg.DataA)
@@ -629,11 +627,11 @@ func (hsm *HotstuffProtocolManager) handleNewViewMsg(msg *HotstuffMessage) error
 		return err
 	}
 
-	v, exist := hsm.lookupView(msg.ViewId)
+	v, exist := hsm.views[msg.ViewId]
 	if !exist {
-		v = hsm.createView(true, PhasePrepare, hsm.app.Self(), msg.DataA)
+		v = hsm.createView(true, PhasePrepare, hsm.app.Self(), msg.DataA, msg.Number)
 		log.Debug("create new view", "leader", v.leaderId, "viewID", v.hash)
-		hsm.addView(v)
+		hsm.views[v.hash] = v
 	}
 
 	v.futureNewViewMsg = append(v.futureNewViewMsg, msg)
@@ -763,7 +761,7 @@ func (hsm *HotstuffProtocolManager) TryPropose() error {
 		return err
 	}
 
-	msg := hsm.newMsg(MsgPrepare, v.hash, kProposal, tProposal, v.qc["high"].kSign.Serialize())
+	msg := hsm.newMsg(MsgPrepare, v.number, v.hash, kProposal, tProposal, v.qc["high"].kSign.Serialize())
 	msg.DataD = make([]byte, len(v.qc["high"].mask))
 	copy(msg.DataD, v.qc["high"].mask)
 
@@ -796,7 +794,7 @@ func (hsm *HotstuffProtocolManager) TryPropose() error {
 	return nil
 }
 
-func VerifySignature(bSign []byte, bMask []byte, data []byte, groupPublicKey []*bls.PublicKey) bool {
+func VerifySignature(bSign []byte, bMask []byte, data []byte, groupPublicKey []*bls.PublicKey, threshold int) bool {
 	var sign bls.Sign
 	if err := sign.Deserialize(bSign); err != nil {
 		return false
@@ -827,9 +825,9 @@ loop:
 		}
 	}
 
-	if (signer < CalcThreshold(len(groupPublicKey))) || !sign.VerifyHash(&pub, crypto.Keccak256(data)) {
+	if signer < threshold || !sign.VerifyHash(&pub, crypto.Keccak256(data)) {
 		log.Debug("Dump failed signature ================")
-		log.Debug("signer", "is", signer, "threshold", CalcThreshold(len(groupPublicKey)))
+		log.Debug("signer", "is", signer, "threshold", threshold)
 		log.Debug("Signature", "is ", hex.EncodeToString(bSign))
 		log.Debug("Mask     ", "is ", hex.EncodeToString(bMask))
 		log.Debug("Data     ", "is ", hex.EncodeToString(data))
@@ -865,10 +863,10 @@ loop:
 
 // for replica
 func (hsm *HotstuffProtocolManager) handlePrepareMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
-		v = hsm.createView(false, PhasePrepare, hsm.app.Self(), m.DataE)
-		hsm.addView(v)
+		v = hsm.createView(false, PhasePrepare, hsm.app.Self(), m.DataE, m.Number)
+		hsm.views[v.hash] = v
 		log.Debug("handlePrepareMsg create view", "viewId", m.ViewId)
 	}
 
@@ -878,13 +876,15 @@ func (hsm *HotstuffProtocolManager) handlePrepareMsg(m *HotstuffMessage) error {
 		return ErrViewPhaseNotMatch
 	}
 
-	var kState, tState, extra []byte
+	isKeyBlock := false
+	var state, extra []byte
 	if len(m.DataA) > 0 {
-		kState = m.DataA
+		isKeyBlock = true
+		state = m.DataA
 	}
 
 	if len(m.DataB) > 0 {
-		tState = m.DataB
+		state = m.DataB
 	}
 
 	if len(m.DataF) > 0 {
@@ -892,12 +892,12 @@ func (hsm *HotstuffProtocolManager) handlePrepareMsg(m *HotstuffMessage) error {
 	}
 
 	// verify highQC in the prepare msg
-	if !VerifySignature(m.DataC, m.DataD, m.DataE, v.groupPublicKey) {
+	if !VerifySignature(m.DataC, m.DataD, m.DataE, v.groupPublicKey, v.threshold) {
 		log.Debug("handlePrepareMsg failed to verify highQC", "viewId", m.ViewId)
 		return ErrInvalidHighQC
 	}
 
-	if err := hsm.app.OnPropose(kState, tState, extra); err != nil {
+	if err := hsm.app.OnPropose(isKeyBlock, state, extra); err != nil {
 		log.Debug("handlePrepareMsg failed to verify proposed data", "viewId", m.ViewId)
 		return ErrInvalidProposal
 	}
@@ -921,7 +921,7 @@ func (hsm *HotstuffProtocolManager) handlePrepareMsg(m *HotstuffMessage) error {
 		tSign = hsm.secretKey.SignHash(crypto.Keccak256(v.proposedTState)).Serialize()
 	}
 
-	msg := hsm.newMsg(MsgVotePrepare, v.hash, nil, kSign, tSign)
+	msg := hsm.newMsg(MsgVotePrepare, v.number, v.hash, nil, kSign, tSign)
 
 	log.Debug("handlePrepareMsg send VotePrepare msg", "viewID", v.hash)
 	hsm.app.Write(m.Id, msg)
@@ -930,7 +930,7 @@ func (hsm *HotstuffProtocolManager) handlePrepareMsg(m *HotstuffMessage) error {
 	return nil
 }
 
-func (hsm *HotstuffProtocolManager) createSignatureMsg(v *View, code uint64, phase string) *HotstuffMessage {
+func (hsm *HotstuffProtocolManager) createSignatureMsg(v *View, code uint32, phase string) *HotstuffMessage {
 	bKSign := []byte(nil)
 	bTSign := []byte(nil)
 	if v.qc[phase].kSign != nil {
@@ -941,12 +941,12 @@ func (hsm *HotstuffProtocolManager) createSignatureMsg(v *View, code uint64, pha
 	}
 
 	// DataA: kSign, DataB: tSign, DataC: mask
-	return hsm.newMsg(code, v.hash, bKSign, bTSign, v.qc[phase].mask)
+	return hsm.newMsg(code, v.number, v.hash, bKSign, bTSign, v.qc[phase].mask)
 }
 
 // for leader
 func (hsm *HotstuffProtocolManager) handlePrepareVoteMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
 		log.Debug("handlePrepareVoteMsg found no matched view", "viewId", m.ViewId)
 		return ErrMissingView
@@ -1027,7 +1027,7 @@ func (hsm *HotstuffProtocolManager) handlePrepareVoteMsg(m *HotstuffMessage) err
 
 // for replica
 func (hsm *HotstuffProtocolManager) handlePreCommitMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
 		log.Trace("handlePreCommitMsg found no match view", "viewId", m.ViewId)
 		return ErrUnhandledMsg
@@ -1045,14 +1045,14 @@ func (hsm *HotstuffProtocolManager) handlePreCommitMsg(m *HotstuffMessage) error
 
 	// verify prepareQC in the prepare msg
 	if v.hasKState() {
-		if !VerifySignature(m.DataA, m.DataC, v.proposedKState, v.groupPublicKey) {
+		if !VerifySignature(m.DataA, m.DataC, v.proposedKState, v.groupPublicKey, v.threshold) {
 			log.Debug("handlePreCommitMsg failed to verify aggregated k-state signature", "viewId", m.ViewId)
 			return ErrInvalidPrepareQC
 		}
 	}
 
 	if v.hasTState() {
-		if !VerifySignature(m.DataB, m.DataC, v.proposedTState, v.groupPublicKey) {
+		if !VerifySignature(m.DataB, m.DataC, v.proposedTState, v.groupPublicKey, v.threshold) {
 			log.Debug("handlePreCommitMsg failed to verify aggregated t-state signature", "viewId", m.ViewId)
 			hsm.DumpView(v, false)
 			return ErrInvalidPrepareQC
@@ -1071,7 +1071,7 @@ func (hsm *HotstuffProtocolManager) handlePreCommitMsg(m *HotstuffMessage) error
 		tSign = hsm.secretKey.SignHash(crypto.Keccak256(v.proposedTState)).Serialize()
 	}
 
-	msg := hsm.newMsg(MsgVotePreCommit, v.hash, nil, kSign, tSign)
+	msg := hsm.newMsg(MsgVotePreCommit, v.number, v.hash, nil, kSign, tSign)
 
 	log.Debug("handlePreCommitMsg send PhaseCommit msg", "viewId", v.hash)
 	hsm.app.Write(m.Id, msg)
@@ -1082,7 +1082,7 @@ func (hsm *HotstuffProtocolManager) handlePreCommitMsg(m *HotstuffMessage) error
 
 // for leader
 func (hsm *HotstuffProtocolManager) handlePreCommitVoteMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
 		log.Trace("handlePreCommitVoteMsg found no match view", "viewId", m.ViewId)
 		return ErrMissingView
@@ -1161,7 +1161,7 @@ func (hsm *HotstuffProtocolManager) handlePreCommitVoteMsg(m *HotstuffMessage) e
 
 // for replica
 func (hsm *HotstuffProtocolManager) handleCommitMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
 		log.Trace("handleCommitMsg found no match view", "viewId", m.ViewId)
 		return ErrUnhandledMsg
@@ -1180,14 +1180,14 @@ func (hsm *HotstuffProtocolManager) handleCommitMsg(m *HotstuffMessage) error {
 
 	// verify pre-commitQC in the commit msg
 	if v.hasKState() {
-		if !VerifySignature(m.DataA, m.DataC, v.proposedKState, v.groupPublicKey) {
+		if !VerifySignature(m.DataA, m.DataC, v.proposedKState, v.groupPublicKey, v.threshold) {
 			log.Debug("handleCommitMsg failed to verify aggregated k-state signature", "viewId", m.ViewId)
 			return ErrInvalidPrepareQC
 		}
 	}
 
 	if v.hasTState() {
-		if !VerifySignature(m.DataB, m.DataC, v.proposedTState, v.groupPublicKey) {
+		if !VerifySignature(m.DataB, m.DataC, v.proposedTState, v.groupPublicKey, v.threshold) {
 			log.Debug("handleCommitMsg failed to verify aggregated t-state signature", "viewId", m.ViewId)
 			hsm.DumpView(v, false)
 			return ErrInvalidPrepareQC
@@ -1205,7 +1205,7 @@ func (hsm *HotstuffProtocolManager) handleCommitMsg(m *HotstuffMessage) error {
 		tSign = hsm.secretKey.SignHash(crypto.Keccak256(v.proposedTState)).Serialize()
 	}
 
-	msg := hsm.newMsg(MsgVoteCommit, v.hash, nil, kSign, tSign)
+	msg := hsm.newMsg(MsgVoteCommit, v.number, v.hash, nil, kSign, tSign)
 
 	log.Debug("handleCommitMsg send VoteCommit msg", "viewId", v.hash)
 	hsm.app.Write(m.Id, msg)
@@ -1216,7 +1216,7 @@ func (hsm *HotstuffProtocolManager) handleCommitMsg(m *HotstuffMessage) error {
 
 // for leader
 func (hsm *HotstuffProtocolManager) handleCommitVoteMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
 		log.Trace("handleCommitVoteMsg found no match view", "viewId", m.ViewId)
 		return ErrMissingView
@@ -1295,7 +1295,7 @@ func (hsm *HotstuffProtocolManager) handleCommitVoteMsg(m *HotstuffMessage) erro
 
 // for replica
 func (hsm *HotstuffProtocolManager) handleDecideMsg(m *HotstuffMessage) error {
-	v, exist := hsm.lookupView(m.ViewId)
+	v, exist := hsm.views[m.ViewId]
 	if !exist {
 		log.Trace("handleDecideMsg found no match view", "viewId", m.ViewId)
 		return ErrUnhandledMsg
@@ -1313,14 +1313,14 @@ func (hsm *HotstuffProtocolManager) handleDecideMsg(m *HotstuffMessage) error {
 
 	// verify commitQC in the decide phase
 	if v.hasKState() {
-		if !VerifySignature(m.DataA, m.DataC, v.proposedKState, v.groupPublicKey) {
+		if !VerifySignature(m.DataA, m.DataC, v.proposedKState, v.groupPublicKey, v.threshold) {
 			log.Debug("handleDecideMsg failed to verify aggregated k-state signature", "viewId", m.ViewId)
 			return ErrInvalidPrepareQC
 		}
 	}
 
 	if v.hasTState() {
-		if !VerifySignature(m.DataB, m.DataC, v.proposedTState, v.groupPublicKey) {
+		if !VerifySignature(m.DataB, m.DataC, v.proposedTState, v.groupPublicKey, v.threshold) {
 			log.Debug("handleDecideMsg failed to verify aggregated t-state signature", "viewId", m.ViewId)
 			hsm.DumpView(v, false)
 			return ErrInvalidPrepareQC
@@ -1337,80 +1337,6 @@ func (hsm *HotstuffProtocolManager) handleDecideMsg(m *HotstuffMessage) error {
 	//hsm.NewView()
 
 	return nil
-}
-
-func (hsm *HotstuffProtocolManager) NewViewMessage() *HotstuffMessage {
-	return hsm.newMsg(MsgStartNewView, common.Hash{}, nil, nil, nil)
-}
-
-func (hsm *HotstuffProtocolManager) TryProposeMessage() *HotstuffMessage {
-	return hsm.newMsg(MsgTryPropose, common.Hash{}, nil, nil, nil)
-}
-
-func (hsm *HotstuffProtocolManager) handleStartNewView() error {
-	log.Debug("handler handleStartNewView")
-	return hsm.NewView()
-}
-
-func (hsm *HotstuffProtocolManager) handlerTryPropose() error {
-	//log.Debug("handler MsgTryPropose")
-	return hsm.TryPropose()
-}
-
-func (hsm *HotstuffProtocolManager) Stop() {
-	select {
-	case hsm.exit <- true:
-	default:
-	}
-}
-
-func (hsm *HotstuffProtocolManager) handleViewTimeout() error {
-	now := time.Now()
-	if len(hsm.views) > 1 {
-		for _, v := range hsm.views {
-			duration := now.Sub(v.createdAt).Seconds()
-
-			if duration > hsm.timeout.Seconds() {
-				log.Debug("Remove timeout view", "viewId", v.hash, "phase", readablePhase(v.phaseAsReplica))
-				if v.phaseAsReplica < PhaseFinal {
-					hsm.viewDone(v, nil, nil, nil, ErrViewTimeout)
-				}
-
-				hsm.removeView(v)
-				if len(hsm.views) == 1 {
-					break
-				}
-			}
-		}
-	}
-
-	for k, m := range hsm.unhandledMsg {
-		duration := now.Sub(m.ReceivedAt).Seconds()
-
-		if duration > hsm.timeout.Seconds() {
-			log.Debug("Remove unhandled hotstuff message", "viewId", m.ViewId, "code", m.Code, "from", m.Id)
-			hsm.removeFromUnhandled(k)
-		}
-	}
-
-	return nil
-}
-
-func (hsm *HotstuffProtocolManager) setTimeoutTicker(d time.Duration) {
-	hsm.tickerPeriod = d
-}
-
-func (hsm *HotstuffProtocolManager) collectTimeoutView() {
-	ticker := time.NewTicker(hsm.tickerPeriod)
-	for {
-		select {
-		case <-hsm.exit:
-			ticker.Stop()
-			return
-		case <-ticker.C:
-			hsm.app.Write(hsm.app.Self(), hsm.newMsg(MsgCollectTimeoutView, common.Hash{}, nil, nil, nil))
-		}
-	}
 }
 
 func (hsm *HotstuffProtocolManager) handleMessage(m *HotstuffMessage) error {
@@ -1435,13 +1361,13 @@ func (hsm *HotstuffProtocolManager) handleMessage(m *HotstuffMessage) error {
 
 	case m.Code == MsgDecide:
 		return hsm.handleDecideMsg(m)
-
-	case m.Code == MsgCollectTimeoutView:
-		return hsm.handleViewTimeout()
+	//empty message
 	case m.Code == MsgStartNewView:
-		return hsm.handleStartNewView()
+		log.Debug("handler handleStartNewView")
+		return hsm.NewView()
 	case m.Code == MsgTryPropose:
-		return hsm.handlerTryPropose()
+		log.Debug("handler MsgTryPropose")
+		return hsm.TryPropose()
 
 	default:
 		log.Warn("unknown hotstuff message", "code", m.Code)
@@ -1455,14 +1381,10 @@ func (hsm *HotstuffProtocolManager) addToUnhandled(m *HotstuffMessage) {
 		log.Warn("failed to encode hotstuff message to bytes, discarded")
 		return
 	}
-	m.touch()
+	m.ReceivedAt = time.Now() //??
 
 	k := crypto.Keccak256Hash(bs)
 	hsm.unhandledMsg[k] = m
-}
-
-func (hsm *HotstuffProtocolManager) removeFromUnhandled(k common.Hash) {
-	delete(hsm.unhandledMsg, k)
 }
 
 func (hsm *HotstuffProtocolManager) HandleMessage(msg *HotstuffMessage) error {
@@ -1477,7 +1399,7 @@ func (hsm *HotstuffProtocolManager) HandleMessage(msg *HotstuffMessage) error {
 	for k, m := range hsm.unhandledMsg {
 		if e := hsm.handleMessage(m); e != ErrUnhandledMsg {
 			log.Debug("Remove unhandled hotstuff message", "viewId", msg.ViewId, "code", msg.Code, "from", msg.Id)
-			hsm.removeFromUnhandled(k)
+			delete(hsm.unhandledMsg, k)
 		}
 	}
 
