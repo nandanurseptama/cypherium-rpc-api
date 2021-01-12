@@ -24,6 +24,7 @@ type ServerInfo struct {
 }
 type KeyBlockChainInterface interface {
 	CurrentBlock() *types.KeyBlock
+	CurrentBlockN() uint64
 	GetBlockByHash(hash common.Hash) *types.KeyBlock
 	CurrentCommittee() []*common.Cnode
 }
@@ -39,6 +40,7 @@ type Committee struct {
 
 type currentMemberInfo struct {
 	kNumber uint64
+	hash    common.Hash
 	mIndex  int
 }
 
@@ -91,6 +93,7 @@ func SetCommitteeConfig(db cphdb.Database, keyblockchain KeyBlockChainInterface,
 }
 
 func SetServerInfo(address, pubKey string) {
+	common.M_MyHostAddress = address
 	m_config.serverInfo.address = address
 	m_config.serverInfo.pubKey = pubKey
 }
@@ -202,15 +205,17 @@ func IamMember() int {
 		log.Error("Committee.IamMember", "keyblockchain is nil", "")
 		return -1
 	}
-	kNumber := m_config.keyblockchain.CurrentBlock().NumberU64()
+	kNumber := m_config.keyblockchain.CurrentBlockN()
 	m := m_config.currentMember.Load().(*currentMemberInfo)
 	if m != nil && m.kNumber == kNumber {
-		return m.mIndex
+		if m_config.keyblockchain.CurrentBlock().Hash() == m.hash {
+			return m.mIndex
+		}
 	}
 	list := m_config.keyblockchain.CurrentCommittee()
 	for i, r := range list {
 		if r.Public == myPubKey {
-			m_config.currentMember.Store(&currentMemberInfo{kNumber: kNumber, mIndex: i})
+			m_config.currentMember.Store(&currentMemberInfo{kNumber: kNumber, hash: m_config.keyblockchain.CurrentBlock().Hash(), mIndex: i})
 			return i
 		}
 	}

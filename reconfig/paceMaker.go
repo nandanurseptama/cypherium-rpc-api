@@ -18,7 +18,6 @@ var maxPaceMakerTime time.Time
 type paceMakerTimer struct {
 	sync.Mutex
 	startTime     time.Time
-	waitTime      time.Duration
 	beStop        bool
 	beClose       bool
 	service       serviceI
@@ -29,14 +28,13 @@ type paceMakerTimer struct {
 	kbc           *core.KeyBlockChain
 }
 
-func newPaceMakerTimer(config *params.ChainConfig, s serviceI, cph Backend) (vTimer *paceMakerTimer) {
+func newPaceMakerTimer(config *params.ChainConfig, s serviceI, cph Backend) *paceMakerTimer {
 	maxPaceMakerTime = time.Now().AddDate(100, 0, 0) //100 years
 	vt := &paceMakerTimer{
 		service:       s,
 		txPool:        cph.TxPool(),
 		candidatepool: cph.CandidatePool(),
 		startTime:     maxPaceMakerTime,
-		waitTime:      params.PaceMakerTimeout,
 		beStop:        true,
 		beClose:       false,
 		config:        config,
@@ -80,17 +78,14 @@ func (t *paceMakerTimer) close() {
 	defer t.Unlock()
 	t.beClose = true
 }
-
 func (t *paceMakerTimer) get() (time.Time, bool, bool, int) {
 	t.Lock()
 	defer t.Unlock()
 	return t.startTime, t.beStop, t.beClose, t.retryNumber
-
 }
 
 // Loop for status action
 func (t *paceMakerTimer) loopTimer() {
-	lastHeartBeatTm := time.Now()
 	for {
 		time.Sleep(50 * time.Millisecond)
 		startTime, beStop, beClose, retryNumber := t.get()
@@ -98,18 +93,15 @@ func (t *paceMakerTimer) loopTimer() {
 			return
 		}
 
-		diff := time.Now().Sub(lastHeartBeatTm)
-		if diff > params.PaceMakerHeatTimeout {
-			t.service.sendHeartBeatMsg()
-			lastHeartBeatTm = time.Now()
-		}
-
 		if beStop {
 			continue
 		}
-
-		diff = time.Now().Sub(startTime)
-		if diff > t.waitTime /**time.Duration(retryNumber+1)*/ && bftview.IamMember() >= 0 { //timeout
+		now := time.Now()
+		diff := now.Sub(startTime)
+		if diff > params.AckTimeout && now.Sub(t.service.LeaderAckTime()) > params.AckTimeout && bftview.IamMember() >= 0 {
+			t.setNextLeader(false)
+			t.service.ResetLeaderAckTime()
+		} else if diff > params.PaceMakerTimeout /**time.Duration(retryNumber+1)*/ && bftview.IamMember() >= 0 { //timeout
 			log.Warn("Viewchange Event is coming", "retryNumber", retryNumber)
 			switchLen := bftview.GetServerCommitteeLen()/2 + 1
 			if t.retryNumber > switchLen && t.retryNumber%switchLen == 0 {
@@ -117,21 +109,30 @@ func (t *paceMakerTimer) loopTimer() {
 				t.start()
 				continue
 			}
-			curView := t.service.getCurrentView()
-			if curView.ReconfigType == types.PowReconfig || curView.ReconfigType == types.PacePowReconfig {
-				t.service.setNextLeader(types.PacePowReconfig)
-			} else {
-				if t.service.getBestCandidate(false) != nil || len(t.candidatepool.Content()) > 0 {
-					t.service.setNextLeader(types.PacePowReconfig)
-				} else {
-					t.service.setNextLeader(types.PaceReconfig)
-				}
-			}
-			t.service.sendNewViewMsg(curView.TxNumber)
-			t.start()
+			t.setNextLeader(false)
 			t.retryNumber++
 		}
 	}
+}
+
+func (t *paceMakerTimer) setNextLeader(isDone bool) {
+	curView := t.service.GetCurrentView()
+	if isDone {
+		if t.service.getBestCandidate(false) != nil || len(t.candidatepool.Content()) > 0 {
+			t.service.setNextLeader(types.PowReconfig)
+		} else {
+			t.service.setNextLeader(types.TimeReconfig)
+		}
+	} else {
+		if t.service.getBestCandidate(false) != nil || len(t.candidatepool.Content()) > 0 {
+			t.service.setNextLeader(types.PacePowReconfig)
+		} else {
+			t.service.setNextLeader(types.PaceReconfig)
+		}
+	}
+
+	t.service.sendNewViewMsg(curView.TxNumber)
+	t.start()
 }
 
 var m_totalTxs int
@@ -158,13 +159,9 @@ func (t *paceMakerTimer) procBlockDone(curBlock *types.Block, curKeyBlock *types
 			}
 		}
 
-		n := (curBlock.NumberU64() - curKeyBlock.T_Number() + 1)
-		if n > 0 {
-			if n%params.KeyblockPerTxBlocks == 0 {
-				t.service.setNextLeader(types.PowReconfig)
-			} else if n%params.GapTxBlocks == 0 {
-				t.service.setNextLeader(types.TimeReconfig)
-			}
+		n := curBlock.NumberU64() - curKeyBlock.T_Number()
+		if n > 0 && n%params.KeyblockPerTxBlocks == 0 {
+			t.setNextLeader(true)
 		}
 
 		if curBlock.NumberU64()%20 == 0 {

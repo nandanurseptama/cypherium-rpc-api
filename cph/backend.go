@@ -131,7 +131,6 @@ func New(ctx *node.ServiceContext, config *Config) (*Cypherium, error) {
 		return nil, err
 	}
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisKeyBlock(chainDb, config.GenesisKey)
-	chainConfig.OnetGroupPublicKeyDir = config.PublicKeyDir
 	chainConfig.OnetPort = config.OnetPort
 	chainConfig.EnabledTPS = config.TxPool.EnableTPS
 	chainConfig.PowRangeMode = config.PowRangeMode
@@ -430,7 +429,7 @@ func (s *Cypherium) Protocols() []p2p.Protocol {
 }
 
 func (s *Cypherium) LatestTPSMeter() {
-	oldTxHeight := s.BlockChain().CurrentBlock().NumberU64()
+	oldTxHeight := s.BlockChain().CurrentBlockN()
 	for {
 		time.Sleep(time.Second)
 
@@ -440,7 +439,7 @@ func (s *Cypherium) LatestTPSMeter() {
 		default:
 		}
 
-		currentTxHeight := s.BlockChain().CurrentBlock().NumberU64()
+		currentTxHeight := s.BlockChain().CurrentBlockN()
 		//log.Info("TPS Meter", "old", oldTxHeight, "current", currentTxHeight)
 		txN := 0
 		for old := oldTxHeight + 1; old <= currentTxHeight; old += 1 {

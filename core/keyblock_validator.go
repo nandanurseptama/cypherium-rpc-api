@@ -56,7 +56,7 @@ func (kbv *KeyBlockValidator) ValidateKeyBlock(block *types.KeyBlock) error {
 		return err
 	}
 
-	if !hotstuff.VerifySignature(block.Signatrue(), block.Exceptions(), buff.Bytes(), pubs) {
+	if !hotstuff.VerifySignature(block.Signatrue(), block.Exceptions(), buff.Bytes(), pubs, (len(pubs)+1)*2/3) {
 		return types.ErrInvalidSignature
 	}
 

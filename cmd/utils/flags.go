@@ -1065,7 +1065,6 @@ func SetCphhConfig(ctx *cli.Context, stack *node.Node, cfg *cph.Config) {
 	SetLocalTestTestIpSw(ctx, &cfg.LocalTestConfig)
 	setCphash(ctx, cfg)
 
-	cfg.PublicKeyDir = ctx.GlobalString(PublicKeyFlag.Name)
 	cfg.OnetPort = ctx.GlobalString(OnetPortFlag.Name)
 
 	switch {

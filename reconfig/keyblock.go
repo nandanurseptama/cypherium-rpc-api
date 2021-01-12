@@ -121,10 +121,10 @@ func (keyS *keyService) verifyKeyBlock(keyblock *types.KeyBlock, bestCandi *type
 		//log.Error("verifyKeyBlock", "Non contiguous consensus prevhash", keyblock.ParentHash(), "currenthash", curKeyblock.Hash())
 		return fmt.Errorf("verifyKeyBlock,Non contiguous key block's hash")
 	}
-	if keyblock.T_Number() != keyS.bc.CurrentBlock().NumberU64()+1 {
-		return fmt.Errorf("verifyKeyBlock, T_Number is not current, cur tx number:%d, k_t_number:%d", keyS.bc.CurrentBlock().NumberU64(), keyblock.T_Number())
+	if keyblock.T_Number() != keyS.bc.CurrentBlockN() {
+		return fmt.Errorf("verifyKeyBlock, T_Number is not current, cur tx number:%d, k_t_number:%d", keyS.bc.CurrentBlockN(), keyblock.T_Number())
 	}
-	viewleaderIndex := keyS.s.getCurrentView().LeaderIndex
+	viewleaderIndex := keyS.s.GetCurrentView().LeaderIndex
 	index := bftview.GetMemberIndex(keyblock.LeaderPubKey())
 	if index != int(viewleaderIndex) {
 		return fmt.Errorf("verifyKeyBlock,leaderindex(%d) error, nowIndex:%d", viewleaderIndex, index)
@@ -134,7 +134,7 @@ func (keyS *keyService) verifyKeyBlock(keyblock *types.KeyBlock, bestCandi *type
 	}
 
 	if !keyblock.TypeCheck(kbc.CurrentBlock().T_Number()) {
-		return fmt.Errorf("verifyKeyBlock, check failed, current T_number:%d,keyblock T_Number:%d", kbc.CurrentBlock().NumberU64(), keyblock.T_Number())
+		return fmt.Errorf("verifyKeyBlock, check failed, current keynumber:%d,keyblock T_Number:%d", kbc.CurrentBlockN(), keyblock.T_Number())
 	}
 
 	keyType := keyblock.BlockType()
@@ -221,14 +221,14 @@ func (keyS *keyService) verifyKeyBlock(keyblock *types.KeyBlock, bestCandi *type
 }
 
 // Try to change committee and proposal a new keyblock
-func (keyS *keyService) tryProposalChangeCommittee(parentTxBlock *types.Block, reconfigType uint8, leaderIndex uint) (*types.Block, *types.KeyBlock, *bftview.Committee, *types.Candidate, string, error) {
-	log.Info("tryProposalChangeCommittee", "tx number", parentTxBlock.NumberU64(), "reconfigType", reconfigType, "leaderIndex", leaderIndex)
+func (keyS *keyService) tryProposalChangeCommittee(reconfigType uint8, leaderIndex uint) (*types.KeyBlock, *bftview.Committee, *types.Candidate, string, error) {
+	log.Info("tryProposalChangeCommittee", "tx number", keyS.bc.CurrentBlockN(), "reconfigType", reconfigType, "leaderIndex", leaderIndex)
 	curKeyBlock := keyS.kbc.CurrentBlock()
 	curKNumber := curKeyBlock.Number()
 	curKHash := curKeyBlock.Hash()
 	mb := bftview.GetCurrentMember()
 	if mb == nil {
-		return nil, nil, nil, nil, "", fmt.Errorf("not found committee in keyblock number=%d", curKNumber)
+		return nil, nil, nil, "", fmt.Errorf("not found committee in keyblock number=%d", curKNumber)
 	}
 	mb = mb.Copy()
 
@@ -245,7 +245,7 @@ func (keyS *keyService) tryProposalChangeCommittee(parentTxBlock *types.Block, r
 	badAddress := keyS.getBadAddress()
 	if reconfigType == types.PowReconfig || reconfigType == types.PacePowReconfig {
 		if best == nil {
-			return nil, nil, nil, nil, "", fmt.Errorf("best candidate is nil")
+			return nil, nil, nil, "", fmt.Errorf("best candidate is nil")
 		}
 		ck := best.KeyCandidate
 		header.Version, header.Time, header.Difficulty, header.Extra, header.MixDigest, header.Nonce = ck.Version, ck.Time, ck.Difficulty, ck.Extra, ck.MixDigest, ck.Nonce
@@ -256,7 +256,7 @@ func (keyS *keyService) tryProposalChangeCommittee(parentTxBlock *types.Block, r
 		}
 		outer := mb.Add(newNode, int(leaderIndex), badAddress)
 		if outer == nil { //not new add
-			return nil, nil, nil, nil, "", fmt.Errorf("not new best candidate")
+			return nil, nil, nil, "", fmt.Errorf("not new best candidate")
 		}
 		outerPublic, outerCoinBase = outer.Public, outer.CoinBase
 
@@ -266,23 +266,12 @@ func (keyS *keyService) tryProposalChangeCommittee(parentTxBlock *types.Block, r
 	}
 
 	header.CommitteeHash = mb.RlpHash()
-	header.T_Number = parentTxBlock.NumberU64() + 1
+	header.T_Number = keyS.bc.CurrentBlockN()
 	keyblock := types.NewKeyBlock(header)
 	keyblock = keyblock.WithBody(mb.In().Public, mb.In().CoinBase, outerPublic, outerCoinBase, mb.Leader().Public, mb.Leader().CoinBase)
 	log.Info("tryProposalChangeCommittee", "committeeHash", header.CommitteeHash, "leader", keyblock.LeaderPubKey())
-	//--tx block---------------------------------------------------------------------------------------------
-	state, err := keyS.bc.StateAt(parentTxBlock.Root())
-	if err != nil {
-		return nil, nil, nil, nil, "", err
-	}
-	txheader := packageHeader(curKHash, parentTxBlock, state, types.IsKeyBlockType)
-	block, err := keyS.bc.Processor.Finalize(false, txheader, state, nil, nil)
-	if err != nil {
-		return nil, nil, nil, nil, "", err
-	}
 	mb.Store(keyblock)
-
-	return block, keyblock, mb, best, badAddress, nil
+	return keyblock, mb, best, badAddress, nil
 }
 
 // Clear candidate in cache
@@ -308,7 +297,7 @@ func (keyS *keyService) getBestCandidate(refresh bool) *types.Candidate {
 	defer keyS.muBestCandidate.Unlock()
 
 	if refresh {
-		kNumber := keyS.kbc.CurrentBlock().NumberU64() + 1
+		kNumber := keyS.kbc.CurrentBlockN() + 1
 		if keyS.bestCandidate != nil && keyS.bestCandidate.KeyCandidate.Number.Uint64() != kNumber {
 			keyS.bestCandidate = nil
 		}
@@ -322,7 +311,7 @@ func (keyS *keyService) getBestCandidate(refresh bool) *types.Candidate {
 					keyS.bestCandidate = best
 				}
 			} else {
-				log.Warn("getBestCandidate", "have not get the candidate keyNumber", keyS.kbc.CurrentBlock().NumberU64(), "KeyCandidate number", best.KeyCandidate.Number.Uint64())
+				log.Warn("getBestCandidate", "have not get the candidate keyNumber", keyS.kbc.CurrentBlockN(), "KeyCandidate number", best.KeyCandidate.Number.Uint64())
 			}
 		}
 	} //end if refresh
@@ -337,7 +326,7 @@ func (keyS *keyService) setBestCandidateAndBadAddress(bestCandidates []*types.Ca
 	if best != nil {
 		bestNonce = best.KeyCandidate.Nonce.Uint64()
 	}
-	keyNumber := keyS.kbc.CurrentBlock().NumberU64() + 1
+	keyNumber := keyS.kbc.CurrentBlockN() + 1
 	for _, cand := range bestCandidates {
 		ck := cand.KeyCandidate
 		if ck.Number.Uint64() == keyNumber && ck.Nonce.Uint64() < bestNonce {

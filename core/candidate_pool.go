@@ -12,13 +12,14 @@ import (
 	"sort"
 	"time"
 
+	"strconv"
+
 	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core/types"
 	"github.com/cypherium/cypherBFT/cphdb"
 	"github.com/cypherium/cypherBFT/event"
 	"github.com/cypherium/cypherBFT/log"
 	"github.com/cypherium/cypherBFT/pow"
-	"strconv"
 )
 
 var (
@@ -243,6 +244,7 @@ func (cp *CandidatePool) add(candidate *types.Candidate, local bool, isPlaintext
 	defer cp.mu.Unlock()
 	keyBlock := cp.backend.KeyBlockChain().CurrentBlock()
 	if candidate.KeyCandidate.T_Number < keyBlock.T_Number() {
+		log.Error("CandidatePool.add is too low", "number", candidate.KeyCandidate.T_Number)
 		return errors.New("candidate's txBlockNumber is too low")
 	}
 	if exists := cp.candidates.Add(candidate); !exists {
@@ -283,7 +285,7 @@ func (cp *CandidatePool) AddLocal(candidate *types.Candidate) error {
 	keyHeadNumber := cp.backend.KeyBlockChain().CurrentBlock().Number()
 	if keyHeadNumber.Cmp(candidate.KeyCandidate.Number) >= 0 {
 		log.Error("Discard local candidate: number too low",
-			"candidate.number", candidate.KeyCandidate.Number.Uint64(), "keyNumber", cp.backend.KeyBlockChain().CurrentBlock().NumberU64())
+			"candidate.number", candidate.KeyCandidate.Number.Uint64(), "keyNumber", cp.backend.KeyBlockChain().CurrentBlockN())
 		return ErrCandidateNumberLow
 	}
 
