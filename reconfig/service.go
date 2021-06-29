@@ -690,9 +690,9 @@ func (s *Service) setNextLeader(reconfigType uint8) {
 	defer s.muCurrentView.Unlock()
 
 	if reconfigType == types.PowReconfig {
-		s.currentView.LeaderIndex = s.kbc.GetNextLeaderIndex(0, nil)
+		s.currentView.LeaderIndex = s.keyService.getNextLeaderIndex(0)
 	} else {
-		s.currentView.LeaderIndex = s.kbc.GetNextLeaderIndex(s.currentView.LeaderIndex, nil)
+		s.currentView.LeaderIndex = s.keyService.getNextLeaderIndex(s.currentView.LeaderIndex)
 	}
 	s.currentView.ReconfigType = reconfigType
 	log.Info("setNextLeader", "type", reconfigType, "index", s.currentView.LeaderIndex)
@@ -802,18 +802,3 @@ func (s *Service) Exceptions(blockNumber int64) []string {
 	}
 	return exs
 }
-
-/*
-func (s *Service) MakeupData(data *hotstuff.StateSign) []byte {
-	if data.Type == hotstuff.TxState {
-		block := types.DecodeToBlock(data.State)
-		block.SetSignature(data.Sign, data.Mask)
-		return block.EncodeToBytes()
-	} else if data.Type == hotstuff.KeyState {
-		block := types.DecodeToKeyBlock(data.State)
-		block.SetSignature(data.Sign, data.Mask)
-		return block.EncodeToBytes()
-	}
-	return nil
-}
-*/
