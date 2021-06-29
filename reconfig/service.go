@@ -18,9 +18,13 @@ package reconfig
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cypherium/cypherBFT/params"
 
 	"github.com/cypherium/cypherBFT/common"
 	"github.com/cypherium/cypherBFT/core"
@@ -801,4 +805,32 @@ func (s *Service) Exceptions(blockNumber int64) []string {
 		exs = append(exs, cm[i].CoinBase)
 	}
 	return exs
+}
+
+func (s *Service) TakePartInNumbers(address common.Address, backCheckNumber int64) []string {
+	var takePartInNumberList []string
+	var i, backBlockNumber int64
+	isInExceptions := false
+	for i = 0; i < int64(params.CheckBackNumber); i++ {
+		if backCheckNumber == 0 {
+			backBlockNumber = int64(s.bc.CurrentBlockN()) - i
+		} else {
+			backBlockNumber = backCheckNumber
+		}
+
+		exceptions := s.Exceptions(backBlockNumber)
+		for _, exception := range exceptions {
+			log.Debug("Service TakePartInNumbers", "backBlockNumber", backBlockNumber, "address", strings.ToLower(address.String()), "exception", strings.ToLower(exception))
+			if strings.ToLower(address.String()) == strings.ToLower(exception) {
+				isInExceptions = true
+				break
+			} else {
+				isInExceptions = false
+			}
+		}
+		if !isInExceptions {
+			takePartInNumberList = append(takePartInNumberList, strconv.FormatInt(backBlockNumber, 10))
+		}
+	}
+	return takePartInNumberList
 }
