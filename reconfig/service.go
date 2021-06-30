@@ -804,7 +804,7 @@ func (s *Service) Exceptions(blockNumber int64) []string {
 	return exs
 }
 
-func (s *Service) TakePartInNumbers(address common.Address, checkKeyNumber int64) []string {
+func (s *Service) TakePartInNumberList(address common.Address, checkKeyNumber int64) []string {
 	coinbase := address.String()
 	if checkKeyNumber < 0 || uint64(checkKeyNumber) > s.kbc.CurrentBlockN() {
 		return nil
