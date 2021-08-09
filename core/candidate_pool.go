@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"math/big"
+	"strings"
 	"sync"
 
 	"golang.org/x/crypto/ed25519"
@@ -21,7 +22,6 @@ import (
 	"github.com/cypherium/cypherBFT/cphdb"
 	"github.com/cypherium/cypherBFT/event"
 	"github.com/cypherium/cypherBFT/log"
-	"github.com/cypherium/cypherBFT/p2p/netutil"
 	"github.com/cypherium/cypherBFT/pow"
 )
 
@@ -209,6 +209,20 @@ func (t *candidateLookup) FoundCandidate(number *big.Int, pubKey string) bool {
 	return false
 }
 
+func (t *candidateLookup) FoundCandidateByIp(ip string) (*types.Candidate, bool) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	for _, candidate := range t.all {
+		log.Debug("FoundCandidateByIp", "ip", ip, "candidate.IP", net.IP(candidate.IP).String())
+		if ip == net.IP(candidate.IP).String() {
+			log.Debug("FoundCandidateByIp true")
+			return candidate, true
+		}
+	}
+	return nil, false
+}
+
 // CandidatePoolConfig are the configuration parameters of the transaction pool.
 type LocalTestIpConfig struct {
 	LocalTestIP string
@@ -256,12 +270,11 @@ func (cp *CandidatePool) loop() {
 		switch obj := ev.Data.(type) {
 		case RemoteCandidateEvent:
 			candidate := obj.Candidate
-			log.Debug("loop RemoteCandidateEvent", "candidate.number", obj.Candidate.KeyCandidate.Number.Uint64(), "candidate.PubKey", obj.Candidate.PubKey, "IP", candidate.IP, "Port", candidate.Port)
+			log.Info("loop RemoteCandidateEvent", "candidate.number", obj.Candidate.KeyCandidate.Number.Uint64(), "candidate.PubKey", obj.Candidate.PubKey, "IP", candidate.IP, "Port", candidate.Port)
 			err := cp.AddRemote(candidate, false)
 			if err != nil {
 				log.Error("loop RemoteCandidateEvent", "err", ErrCandidatePowVerificationFail)
 			}
-
 		}
 	}
 }
@@ -274,39 +287,41 @@ func (cp *CandidatePool) add(candidate *types.Candidate, local bool, isPlaintext
 		log.Error("CandidatePool.add is too low", "number", candidate.KeyCandidate.T_Number)
 		return errors.New("candidate's txBlockNumber is too low")
 	}
-	cp.CheckMinerPort("127.0.0.1:7100", cp.backend.BlockChain().CurrentBlockN(), cp.backend.KeyBlockChain().CurrentBlockN())
+
 	if exists := cp.candidates.Add(candidate); !exists {
-		/*
-			log.Info("CandidatePool add new candidate",
-				"local", local,
-				"candidate.number", candidate.KeyCandidate.Number.Uint64(),
-				"pubkey", candidate.PubKey,
-				"hash", candidate.Hash(),
-			)
-		*/
-		if local == false {
+		log.Debug("CandidatePool add new candidate",
+			"local", local,
+			"candidate.number", candidate.KeyCandidate.Number.Uint64(),
+			"pubkey", candidate.PubKey,
+			"hash", candidate.Hash(),
+		)
+		cp.CheckMinerPort(net.IP(candidate.IP).String()+":"+strconv.Itoa(candidate.Port), cp.backend.BlockChain().CurrentBlockN(), cp.backend.KeyBlockChain().CurrentBlockN())
 
-			// if the candidate comes from network, we need to notify reconfig module which may start doing PBFT consensus
-			go cp.mux.Post(RemoteCandidateEvent{Candidate: candidate})
-
-		}
-
-		// Broadcast to p2p network
-		go cp.feed.Send(candidate)
 	} else {
-		//log.Info("Try to add existing candidate, ignored",
-		//	"local", local,
-		//	"candidate.number", candidate.KeyCandidate.Number.Uint64(),
-		//	"pubkey", hex.EncodeToString(candidate.PubKey),
-		//	"hash", candidate.Hash(),
-		//)
+		log.Debug("Try to add existing candidate, ignored",
+			"local", local,
+			"candidate.number", candidate.KeyCandidate.Number.Uint64(),
+			"hash", candidate.Hash(),
+		)
 	}
 
 	return nil
 }
 
 func (cp *CandidatePool) CheckMinerMsgAck(address string, blockN uint64, keyblockN uint64) {
-	//.........
+	log.Debug("CheckMinerMsgAck", "address", address, "blockN", blockN, "keyblockN", keyblockN, "CurrentBlockN()", cp.backend.KeyBlockChain().CurrentBlockN())
+	if cp.backend.KeyBlockChain().CurrentBlockN() > keyblockN {
+		return
+	}
+	lastIndex := strings.LastIndex(address, ":")
+	ip := address[:lastIndex]
+	log.Debug("CheckMinerMsgAck", "ip", ip)
+	if candidate, isExist := cp.candidates.FoundCandidateByIp(ip); isExist == true {
+		log.Debug("CheckMinerMsgAck broadcast")
+		// Broadcast to p2p network
+		go cp.feed.Send(candidate)
+	}
+
 }
 
 func (cp *CandidatePool) Content() []*types.Candidate {
@@ -361,11 +376,6 @@ func (cp *CandidatePool) verify(candidate *types.Candidate) error {
 		return ErrCandidateVersionLow
 	}
 
-	err = netutil.VerifyConnectivity("udp", net.IP(candidate.IP), candidate.Port)
-	if err != nil {
-		log.Warn("candidate pool verify candidate's ip", "err", err)
-		return err
-	}
 	return nil
 }
 
