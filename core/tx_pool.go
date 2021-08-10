@@ -79,6 +79,8 @@ var (
 	ErrOverSlotsData = errors.New("overslots data")
 
 	ErrLockedFunds = errors.New("locked funds")
+
+	ErrInvalidTxDataV = errors.New("invalid txdata V")
 )
 
 var (
@@ -652,6 +654,9 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		log.Trace("Intrinsic Gas too low", "gas", tx.Gas(), "Intrinsic", intrGas)
 		return ErrIntrinsicGas
 	}
+	if !tx.ValidateV() {
+	//	return ErrInvalidTxDataV
+	}
 	return nil
 }
 
@@ -679,9 +684,11 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		return false, err
 	}
 	//pool.LogTxMsg("txpool.add", "hash", tx.Hash())
-
 	// If the transaction is replacing an already pending one, do directly
-	from, _ := types.Sender(pool.signer, tx) // already validated
+	from, err := types.Sender(pool.signer, tx)
+	if err!=nil{
+		return false,err
+	}
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
 		// Nonce already pending, check if required price bump is met
 		inserted, old := list.Add(tx, pool.config.PriceBump)
@@ -699,9 +706,6 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		pool.all.Add(tx)
 		pool.priced.Put(tx)
 		pool.journalTx(from, tx)
-
-		//pool.LogTxMsg("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
-
 		// We've directly injected a replacement transaction, notify subsystems
 		go pool.txFeed.Send(NewTxsEvent{types.Transactions{tx}})
 
@@ -711,7 +715,6 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	replace, err := pool.enqueueTx(hash, tx)
 	if err != nil {
 		//log.Warn("txpool.add enqueueTx", "hash", tx.Hash(), "err", err)
-		//pool.LogTxMsg("txpool.add enqueueTx", "hash", tx.Hash(), "err", err)
 		return false, err
 	}
 	// Mark local addresses and journal local transactions
@@ -719,7 +722,6 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		pool.locals.add(from)
 	}
 	pool.journalTx(from, tx)
-	//pool.LogTxMsg("Pooled new future transaction", "hash", hash)
 
 	return replace, nil
 }
