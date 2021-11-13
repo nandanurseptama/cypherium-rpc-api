@@ -6,6 +6,10 @@ module.exports = function(req, res, next){
     axios.post(
         `${process.env.RPC_API}`,
         req.body,
+        {
+            headers: {'Content-Type': 'application/json'},
+        }
+        
     ).then((any)=>{
         return res.status(any.status).json(any.data);
     }).catch((onerror)=>{
