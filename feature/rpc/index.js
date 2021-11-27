@@ -4,11 +4,11 @@ module.exports = function(req, res, next){
     console.log(process.env.RPC_API)
     console.log(`Body : ${req.body}`);
     axios.post(
-        `${process.env.RPC_API}`,        req.body,
-
-	{
-		headers: {'Content-Type': 'application/json'},
-	},
+        `${process.env.RPC_API}`,
+        req.body,
+        {
+            headers: {'Content-Type': 'application/json'},
+        }
     ).then((any)=>{
         return res.status(any.status).json(any.data);
     }).catch((onerror)=>{
