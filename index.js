@@ -1,21 +1,20 @@
-require('dotenv').config();
-const { default: axios } = require('axios');
-const express = require('express');
-const appAuth = require('./core/middleware/auth');
-const httpRpc = require('./feature/rpc');
-const app = express()
-const port = 3000
-app.use(express.json())
+require("dotenv").config();
+const { default: axios } = require("axios");
+const express = require("express");
+const appAuth = require("./core/middleware/auth");
+const httpRpc = require("./feature/rpc");
+const accountsEndpoint = require('./feature/api/account');
+var cors = require('cors')
+const app = express();
+const port = 8000;
+app.use(cors())
+app.use(express.json());
 app.use(appAuth);
-app.post('/rpc',httpRpc);
-app.get('/', (req, res)=>{
-  res.status(200).json({status:'ok'});
-<<<<<<< HEAD
+app.post("/rpc", httpRpc);
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "ok" });
 });
-=======
-})
-
->>>>>>> b428918a1a290800d57b4b08df5f625e6067bf57
+app.post("/rpc/wallet/balance/bulk", accountsEndpoint.bulkTokenBalance);
 app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`)
+  console.log(`Example app listening at http://localhost:${port}`);
 });
