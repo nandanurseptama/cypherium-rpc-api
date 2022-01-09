@@ -1,7 +1,8 @@
 const { default: axios } = require("axios");
 const { getCypheriumPrice } = require("./externals");
 const BigNumber = require("bignumber.js");
-
+var Web3c = require('web3c');
+var web3c = new Web3c();
 const bulkTokenBalance = async (req, res) => {
   console.log(req.body);
   var currency = req.body.currency;
@@ -47,6 +48,8 @@ const bulkTokenBalance = async (req, res) => {
         contractAddress : body[i].contractAddress,
       });
     }
+  } else{
+
   }
   return res.  status(200).json(response);
 };
